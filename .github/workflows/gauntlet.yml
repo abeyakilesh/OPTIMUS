@@ -23,8 +23,15 @@ concurrency:
   group: gauntlet-${{ github.ref }}
   cancel-in-progress: true
 
+# A called reusable workflow can never be granted MORE permission than its
+# caller. `_static-security.yml` needs `security-events: write` (CodeQL) and
+# `_ai-review.yml` needs `pull-requests: write` (to comment), so the caller
+# must hold both — otherwise GitHub rejects the entire run at startup.
+# Each reusable workflow still narrows this down to what it actually needs.
 permissions:
   contents: read
+  security-events: write
+  pull-requests: write
 
 jobs:
   # Which gates does this diff actually need?
