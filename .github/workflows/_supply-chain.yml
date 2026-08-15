@@ -1,0 +1,31 @@
+# Reusable · GATE 5 — licenses + SBOM.
+# OPTIMUS ships as ONE standalone deployable, so a copyleft dep entering the
+# tree is a real licensing problem. CLAUDE.md flags Fincept/firecrawl/maxun as
+# AGPL and n8n as Sustainable Use — none may be linked into this artifact.
+name: "gate:supply-chain"
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  licenses:
+    name: licenses + SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Forbidden licenses
+        run: |
+          npx --yes license-checker-rseidelsohn \
+            --production --excludePrivatePackages \
+            --failOn "AGPL-1.0;AGPL-3.0;GPL-2.0;GPL-3.0;SSPL-1.0;BUSL-1.1;Elastic-2.0"
+      - name: SBOM (CycloneDX)
+        run: npx --yes @cyclonedx/cyclonedx-npm --output-file sbom.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 90

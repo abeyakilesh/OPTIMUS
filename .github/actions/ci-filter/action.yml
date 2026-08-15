@@ -1,0 +1,64 @@
+# Change detection. Modelled on n8n's `.github/actions/ci-filter`.
+#
+# Without this every PR runs every gate, the pipeline gets slow, and people
+# start looking for ways to skip it — which is how gauntlets die. Docs-only
+# changes should not spend 12 minutes in Lighthouse.
+#
+# IMPORTANT: security gates are NOT filtered. They run on every PR regardless
+# of what changed, because "it's only a config file" is exactly how a secret
+# or a malicious dependency gets in.
+name: CI filter
+description: Decide which gates need to run for this diff.
+
+outputs:
+  app:
+    description: App/source code changed
+    value: ${{ steps.filter.outputs.app }}
+  deps:
+    description: Dependency manifest changed
+    value: ${{ steps.filter.outputs.deps }}
+  ci:
+    description: Workflow or action definitions changed
+    value: ${{ steps.filter.outputs.ci }}
+  docs-only:
+    description: Nothing that any gate cares about changed
+    value: ${{ steps.docs.outputs.value }}
+
+runs:
+  using: composite
+  steps:
+    - uses: dorny/paths-filter@v3
+      id: filter
+      with:
+        filters: |
+          app:
+            - 'app/**'
+            - 'components/**'
+            - 'lib/**'
+            - 'public/**'
+            - '*.ts'
+            - '*.mjs'
+            - '*.json'
+          deps:
+            - 'package.json'
+            - 'package-lock.json'
+          ci:
+            - '.github/**'
+            - 'sgconfig.yml'
+            - 'rules/**'
+            - 'tests/**'
+            - 'lighthouserc.json'
+
+    # docs-only is the ABSENCE of every other signal. Expressing it as a
+    # positive `**/*.md` filter would wrongly fire whenever a PR touched both
+    # code and a readme.
+    - id: docs
+      shell: bash
+      run: |
+        if [ "${{ steps.filter.outputs.app }}" = "false" ] \
+        && [ "${{ steps.filter.outputs.deps }}" = "false" ] \
+        && [ "${{ steps.filter.outputs.ci }}" = "false" ]; then
+          echo "value=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "value=false" >> "$GITHUB_OUTPUT"
+        fi

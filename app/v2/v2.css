@@ -1,0 +1,568 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   OPTIMUS — landing v2 effects library
+   ──────────────────────────────────────────────────────────────────────────
+   Every effect on /v2 is defined here or in components/landing-v2/fx.tsx.
+   Numbered E01…E60 so the inventory is auditable (see README).
+
+   Palette rule: these effects only ever paint with the 5 palette tokens
+   (white / sky / cyan / ink / grey). --color-run and --color-pass appear
+   ONLY where they signal mission state.
+
+   Motion rule: globals.css already zeroes every animation + transition
+   under prefers-reduced-motion. JS-driven effects check the media query
+   themselves. Nothing here is load-bearing for legibility — if all motion
+   is disabled the page still reads correctly.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --fx-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --fx-ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* v2 typography — the three faces loaded in app/v2/layout.tsx. Scoped to
+   .v2-root so page v1 keeps the original system stack untouched. */
+.v2-root {
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+.v2-root .font-display {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+.v2-root .font-data {
+  font-family: var(--font-data), ui-monospace, monospace;
+  font-feature-settings: "tnum" 1;
+}
+/* uppercase micro-labels get air, per the type scale */
+.v2-root .label {
+  font-family: var(--font-data), ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* ═══ GROUP 1 · SCROLL REVEALS ═══════════════════════════════════════════ */
+
+/* E01–E08 — one base transition, eight entry vectors. */
+.fx-r {
+  opacity: 0;
+  transition:
+    opacity 0.7s var(--fx-ease),
+    transform 0.7s var(--fx-ease),
+    filter 0.7s var(--fx-ease),
+    clip-path 0.9s var(--fx-ease);
+  transition-delay: var(--fx-d, 0ms);
+}
+.fx-r-up { transform: translateY(24px); }               /* E01 */
+.fx-r-down { transform: translateY(-20px); }            /* E02 */
+.fx-r-left { transform: translateX(-28px); }            /* E03 */
+.fx-r-right { transform: translateX(28px); }            /* E04 */
+.fx-r-scale { transform: scale(0.93); }                 /* E05 */
+.fx-r-blur { filter: blur(12px); transform: translateY(16px); }  /* E06 */
+.fx-r-rot { transform: translateY(22px) rotate(-1.6deg); }       /* E07 */
+.fx-r-clip { opacity: 1; clip-path: inset(0 0 100% 0); }         /* E08 */
+
+.fx-in.fx-r { opacity: 1; transform: none; filter: none; }
+.fx-in.fx-r-clip { clip-path: inset(0 0 0 0); }
+
+/* E09 — masked word/line roll-up. Parent clips, child slides. */
+.fx-word {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 0.08em;
+}
+.fx-word > span {
+  display: inline-block;
+  transform: translateY(105%);
+  opacity: 0;
+  transition:
+    transform 0.85s var(--fx-ease),
+    opacity 0.6s linear;
+  transition-delay: var(--fx-d, 0ms);
+}
+.fx-in .fx-word > span,
+.fx-word.fx-in > span { transform: translateY(0); opacity: 1; }
+
+/* ═══ GROUP 2 · AMBIENT BACKGROUND ══════════════════════════════════════ */
+
+/* E10 — drifting aurora blobs (harvested: nexus `ambient-drift`). */
+@keyframes fx-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(4%, -5%, 0) scale(1.12); }
+}
+@keyframes fx-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.06); }
+  50%      { transform: translate3d(-5%, 4%, 0) scale(0.94); }
+}
+.fx-aurora-a {
+  animation: fx-drift-a 19s ease-in-out infinite;
+  background: radial-gradient(closest-side, var(--color-cyan-soft), transparent 72%);
+}
+.fx-aurora-b {
+  animation: fx-drift-b 24s ease-in-out infinite;
+  background: radial-gradient(closest-side, var(--color-sky-2), transparent 70%);
+}
+
+/* E11 — slow conic sheen rotating behind the hero. */
+@keyframes fx-spin { to { transform: rotate(360deg); } }
+.fx-conic-bg {
+  animation: fx-spin 40s linear infinite;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    var(--color-sky) 60deg,
+    transparent 140deg,
+    var(--color-cyan-soft) 240deg,
+    transparent 330deg
+  );
+}
+
+/* E12 — hairline grid, radially masked so it fades out at the edges. */
+.fx-grid {
+  background-image:
+    linear-gradient(to right, var(--color-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 40%, #000 0%, transparent 100%);
+          mask-image: radial-gradient(70% 60% at 50% 40%, #000 0%, transparent 100%);
+}
+
+/* E13 — fine grain, kills the "flat vector" feel of large white areas. */
+.fx-noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.045'/%3E%3C/svg%3E");
+}
+
+/* E14 — scan line sweeping down the hero panel. */
+@keyframes fx-scan {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateY(1200%); opacity: 0; }
+}
+.fx-scan {
+  animation: fx-scan 7s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  background: linear-gradient(90deg, transparent, var(--color-cyan), transparent);
+}
+
+/* ═══ GROUP 3 · TEXT ════════════════════════════════════════════════════ */
+
+/* E15 — gradient shine travelling across a headline word. */
+@keyframes fx-shine {
+  0%   { background-position: 200% 50%; }
+  100% { background-position: -100% 50%; }
+}
+.fx-shine-text {
+  background: linear-gradient(
+    100deg,
+    var(--color-ink) 0%, var(--color-ink) 38%,
+    var(--color-cyan) 50%,
+    var(--color-ink) 62%, var(--color-ink) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  animation: fx-shine 5.5s ease-in-out infinite;
+}
+
+/* E16 — blinking terminal caret. */
+@keyframes fx-blink { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }
+.fx-caret {
+  animation: fx-blink 1.05s steps(1) infinite;
+}
+
+/* E17 — link underline drawn from the left on hover. */
+.fx-ulink { position: relative; }
+.fx-ulink::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: -2px;
+  height: 1px; width: 100%;
+  background: var(--color-cyan);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.34s var(--fx-ease);
+}
+.fx-ulink:hover::after { transform: scaleX(1); }
+
+/* E18 — infinite marquee ticker (pauses on hover). */
+@keyframes fx-marquee { to { transform: translateX(-50%); } }
+.fx-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: fx-marquee var(--fx-speed, 42s) linear infinite;
+}
+.fx-marquee-track.fx-rev { animation-direction: reverse; }
+.fx-marquee:hover .fx-marquee-track { animation-play-state: paused; }
+.fx-marquee {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+/* ═══ GROUP 4 · POINTER / HOVER ═════════════════════════════════════════ */
+
+/* E19 — 3D tilt. --rx/--ry are written by fx.tsx on mousemove. */
+.fx-tilt {
+  transform: perspective(900px)
+             rotateX(var(--rx, 0deg))
+             rotateY(var(--ry, 0deg))
+             translateZ(0);
+  transition: transform 0.4s var(--fx-ease-soft);
+}
+.fx-tilt-fast { transition-duration: 0.12s; }
+
+/* E20 — spotlight that follows the cursor inside a card. */
+.fx-spot { position: relative; }
+.fx-spot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(
+    260px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--color-cyan) 12%, transparent),
+    transparent 65%
+  );
+}
+.fx-spot:hover::before { opacity: 1; }
+
+/* E21 — border that lights up under the cursor (masked ring). */
+.fx-edge { position: relative; }
+.fx-edge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(
+    220px circle at var(--mx, 50%) var(--my, 50%),
+    var(--color-cyan),
+    transparent 60%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+}
+.fx-edge:hover::after { opacity: 1; }
+
+/* E22 — lift + cyan underglow on hover. */
+.fx-lift {
+  transition:
+    transform 0.42s var(--fx-ease),
+    box-shadow 0.42s var(--fx-ease),
+    border-color 0.42s ease;
+}
+.fx-lift:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 1px 2px rgba(11, 13, 14, 0.04),
+    0 22px 44px -26px rgba(6, 182, 212, 0.55);
+}
+
+/* E23 — sheen sweeping across a button on hover. */
+.fx-sheen { position: relative; overflow: hidden; }
+.fx-sheen::before {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  left: -60%;
+  width: 45%;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  transition: left 0.65s var(--fx-ease-soft);
+}
+.fx-sheen:hover::before { left: 130%; }
+
+/* E24 — click ripple (spans injected by fx.tsx). */
+@keyframes fx-ripple {
+  to { transform: scale(14); opacity: 0; }
+}
+.fx-ripple-dot {
+  position: absolute;
+  width: 12px; height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.28;
+  pointer-events: none;
+  animation: fx-ripple 0.62s var(--fx-ease-soft) forwards;
+}
+
+/* E25 — icon micro-bounce when its card is hovered. */
+@keyframes fx-bounce {
+  0%, 100% { transform: translateY(0); }
+  35%      { transform: translateY(-4px); }
+  65%      { transform: translateY(-1px); }
+}
+.group:hover .fx-bounce { animation: fx-bounce 0.55s var(--fx-ease-soft); }
+
+/* E26 — rotating conic ring on the "live" card border. */
+@keyframes fx-ring-spin { to { --fx-angle: 360deg; } }
+@property --fx-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.fx-ring {
+  position: relative;
+}
+.fx-ring::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--fx-angle),
+    transparent 0deg,
+    var(--color-cyan) 40deg,
+    transparent 110deg,
+    transparent 360deg
+  );
+  animation: fx-ring-spin 4.5s linear infinite;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ═══ GROUP 5 · "THE SYSTEM IS ALIVE" ═══════════════════════════════════ */
+/* Harvested from nexus/apps/web/app/globals.css — the heartbeat + pipe-dot
+   vocabulary, recoloured to the OPTIMUS palette. */
+
+/* E27 — cyan heartbeat: real cardiac curve (fast 12% rise, slow fade),
+   not a symmetric sine. This is the "kernel is running" signal. */
+@keyframes fx-beat {
+  0% {
+    box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.22), 0 8px 24px -6px rgba(6, 182, 212, 0.12);
+    border-color: rgba(6, 182, 212, 0.42);
+  }
+  12% {
+    box-shadow: 0 0 20px 5px rgba(6, 182, 212, 0.5), 0 16px 44px -8px rgba(6, 182, 212, 0.4);
+    border-color: rgba(6, 182, 212, 0.95);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.22), 0 8px 24px -6px rgba(6, 182, 212, 0.12);
+    border-color: rgba(6, 182, 212, 0.42);
+  }
+}
+.fx-beat {
+  border: 1.5px solid rgba(6, 182, 212, 0.5);
+  animation: fx-beat 1.9s cubic-bezier(0.2, 0.8, 0.3, 1) infinite;
+}
+
+/* E28 — amber heartbeat: a step is mid-execution. Faster = more urgent. */
+@keyframes fx-beat-run {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); border-color: rgba(245, 158, 11, 0.4); }
+  50%      { box-shadow: 0 0 10px 2px rgba(245, 158, 11, 0.42); border-color: rgba(245, 158, 11, 0.9); }
+}
+.fx-beat-run {
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  animation: fx-beat-run 1.25s ease-in-out infinite;
+}
+
+/* E29 — radar ping on a status dot.
+   Defined in app/globals.css, not here: the version-switch pill uses it on
+   the v1 page too, and v1 never loads this file. */
+
+/* E30 — skeleton shimmer (harvested: nexus `shimmer-slide`). */
+@keyframes fx-shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+.fx-shimmer { position: relative; overflow: hidden; }
+.fx-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--color-cyan-soft), transparent);
+  animation: fx-shimmer 1.7s ease-in-out infinite;
+}
+
+/* E31–E33 — pipe dots (harvested: nexus `pipe-dot-*` / `bus-flow-dot`).
+   Data travels along the rails between capability and kernel. */
+@keyframes fx-dot-x {
+  0%   { left: -3px; opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+@keyframes fx-dot-y {
+  0%   { top: -3px; opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+/* The shared bus: a dot enters at its own offset and overshoots far to the
+   right; the track clips it. One keyframe serves every lane. */
+@keyframes fx-bus {
+  0%   { transform: translateX(0); opacity: 0; }
+  8%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translateX(1400px); opacity: 0; }
+}
+.fx-dot-x { animation: fx-dot-x var(--fx-dur, 2.6s) linear infinite; animation-delay: var(--fx-d, 0s); }
+.fx-dot-y { animation: fx-dot-y var(--fx-dur, 2.6s) linear infinite; animation-delay: var(--fx-d, 0s); }
+.fx-bus { animation: fx-bus var(--fx-dur, 6s) linear infinite; animation-delay: var(--fx-d, 0s); }
+
+/* E34 — typing dots. */
+@keyframes fx-typing {
+  0%, 80%, 100% { transform: scale(0.55); opacity: 0.35; }
+  40%           { transform: scale(1); opacity: 1; }
+}
+.fx-typing { animation: fx-typing 1.2s ease-in-out infinite; animation-delay: var(--fx-d, 0s); }
+
+/* E35 — equalizer bars (a mission is producing output). */
+@keyframes fx-eq {
+  0%, 100% { transform: scaleY(0.25); }
+  50%      { transform: scaleY(1); }
+}
+.fx-eq {
+  transform-origin: bottom;
+  animation: fx-eq var(--fx-dur, 0.9s) ease-in-out infinite;
+  animation-delay: var(--fx-d, 0s);
+}
+
+/* E36 — SVG stroke draw-in when the section enters view. */
+.fx-draw {
+  stroke-dasharray: var(--fx-len, 400);
+  stroke-dashoffset: var(--fx-len, 400);
+  transition: stroke-dashoffset 1.6s var(--fx-ease);
+  transition-delay: var(--fx-d, 0ms);
+}
+.fx-in .fx-draw { stroke-dashoffset: 0; }
+
+/* E37 — dash flowing around a ring (orbital current). */
+@keyframes fx-dash { to { stroke-dashoffset: -1000; } }
+.fx-dash { animation: fx-dash 22s linear infinite; }
+
+/* E38 — a node orbiting the loop ring. */
+@keyframes fx-orbit { to { transform: rotate(360deg); } }
+.fx-orbit { animation: fx-orbit 14s linear infinite; }
+.fx-orbit-fix { animation: fx-orbit 14s linear infinite reverse; }
+
+/* E39 — gentle float, for cards that should feel weightless. */
+@keyframes fx-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-7px); }
+}
+.fx-float { animation: fx-float var(--fx-dur, 6s) ease-in-out infinite; animation-delay: var(--fx-d, 0s); }
+
+/* E40 — progress bar fill, triggered on view. */
+.fx-fill {
+  width: 0;
+  transition: width 1.5s var(--fx-ease);
+  transition-delay: var(--fx-d, 0ms);
+}
+.fx-in .fx-fill { width: var(--fx-w, 50%); }
+
+/* E41 — a new log line arriving (harvested: nexus `message-in`). */
+@keyframes fx-line-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fx-line-in { animation: fx-line-in 0.3s ease-out; }
+
+/* ═══ GROUP 6 · CHROME ══════════════════════════════════════════════════ */
+
+/* E42 — scroll progress bar. */
+.fx-progress {
+  transform-origin: left;
+  transform: scaleX(var(--fx-p, 0));
+  transition: transform 0.1s linear;
+}
+
+/* E43 — cursor spotlight (desktop pointers only). */
+.fx-cursor {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    460px circle at var(--cx, 50%) var(--cy, 0%),
+    color-mix(in srgb, var(--color-cyan) 7%, transparent),
+    transparent 70%
+  );
+}
+@media (pointer: coarse) { .fx-cursor { display: none; } }
+
+/* E44 — nav condenses once the page scrolls. */
+.fx-nav {
+  transition:
+    height 0.35s var(--fx-ease),
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+/* E45 — mobile menu slide-down. */
+@keyframes fx-menu {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fx-menu { animation: fx-menu 0.26s var(--fx-ease-soft); }
+
+/* E46 — sticky-stacking cards. */
+.fx-stack { position: sticky; top: var(--fx-top, 96px); }
+
+/* E47 — tooltip. */
+.fx-tip {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.22s ease, transform 0.22s var(--fx-ease);
+  pointer-events: none;
+}
+.group:hover .fx-tip { opacity: 1; transform: translateY(0); }
+
+/* E48 — accordion open/close via grid-template-rows. */
+.fx-acc {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.42s var(--fx-ease);
+}
+.fx-acc[data-open="true"] { grid-template-rows: 1fr; }
+.fx-acc > div { overflow: hidden; }
+
+/* E49 — tab indicator sliding between tabs. */
+.fx-tabline {
+  transition: transform 0.4s var(--fx-ease), width 0.4s var(--fx-ease);
+}
+
+/* E50 — arrow nudges out of a link on hover.
+   Also in app/globals.css, for the same reason as E29. */
+
+/* E51 — dashed border marching (placeholder / awaiting state). */
+@keyframes fx-march { to { background-position: 200px 0, -200px 0, 0 200px, 0 -200px; } }
+.fx-march {
+  background-image:
+    linear-gradient(90deg, var(--color-line-2) 50%, transparent 0),
+    linear-gradient(90deg, var(--color-line-2) 50%, transparent 0),
+    linear-gradient(0deg, var(--color-line-2) 50%, transparent 0),
+    linear-gradient(0deg, var(--color-line-2) 50%, transparent 0);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 10px 1px, 10px 1px, 1px 10px, 1px 10px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  animation: fx-march 14s linear infinite;
+}
+
+/* E52 — counter digits roll up when the value lands. */
+@keyframes fx-roll {
+  from { transform: translateY(0.5em); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.fx-roll { animation: fx-roll 0.5s var(--fx-ease) both; }

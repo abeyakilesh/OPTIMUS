@@ -1,0 +1,50 @@
+# Composite setup step. Pattern taken from n8n's `.github/actions/setup-nodejs`
+# and dify's `setup-web` — every job calls this instead of repeating five steps,
+# so the toolchain version is defined in exactly one place.
+name: Setup
+description: Harden the runner, install Node, restore caches, install deps.
+
+inputs:
+  node-version:
+    description: Node major version
+    required: false
+    default: "22"
+  install:
+    description: Run `npm ci`
+    required: false
+    default: "true"
+  egress-policy:
+    description: harden-runner egress policy — audit or block
+    required: false
+    default: "audit"
+
+runs:
+  using: composite
+  steps:
+    # Supply-chain hardening: monitors (and can block) outbound network calls
+    # from the runner, so a compromised transitive dep can't exfiltrate.
+    # Start at `audit`, review the observed endpoints, then flip to `block`.
+    - name: Harden runner
+      uses: step-security/harden-runner@v2
+      with:
+        egress-policy: ${{ inputs.egress-policy }}
+
+    - name: Setup Node ${{ inputs.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    # Next's build cache — cuts rebuild time substantially on unchanged routes.
+    - name: Restore Next.js cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.next/cache
+        key: next-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.ts','**/*.tsx','**/*.css') }}
+        restore-keys: |
+          next-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-
+
+    - name: Install dependencies
+      if: inputs.install == 'true'
+      shell: bash
+      run: npm ci --no-audit --fund=false

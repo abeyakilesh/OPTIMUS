@@ -1,0 +1,17 @@
+# Reusable · GATE 2 — unit + capability-contract tests.
+name: "gate:unit"
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: unit + contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: npx vitest run --reporter=verbose

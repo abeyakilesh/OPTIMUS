@@ -1,0 +1,280 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+   OPTIMUS design tokens
+   Palette: white · cyan blue · light blue · black (minimal, for
+   outlines/text) · grey. Nothing else.
+   ───────────────────────────────────────────────────────────── */
+@theme {
+  /* surfaces */
+  --color-white: #ffffff;
+  --color-mist: #fafbfc;          /* page alt background */
+  --color-sky: #f2fbfd;           /* light blue wash */
+  --color-sky-2: #e4f6fb;         /* light blue, stronger */
+
+  /* cyan (the single accent) */
+  --color-cyan: #06b6d4;
+  --color-cyan-dark: #0891b2;
+  --color-cyan-soft: #cff4fb;
+
+  /* ink + grey */
+  --color-ink: #0b0d0e;           /* near-black: headings, buttons */
+  --color-body: #4b5563;          /* body grey */
+  --color-muted: #7b8794;         /* secondary grey */
+  --color-faint: #9aa4b0;         /* tertiary grey */
+  --color-line: #e6e9ec;          /* borders */
+  --color-line-2: #d5dade;        /* stronger borders */
+
+  /* ── the only 2 non-palette hues, and they are SEMANTIC, not decorative.
+     They encode mission state and nothing else. Never use them for
+     backgrounds, headings, buttons or "visual interest". ── */
+  --color-run: #f59e0b;           /* amber  — a step is executing */
+  --color-run-soft: #fef3c7;
+  --color-pass: #10b981;          /* emerald — verified, proof passed */
+  --color-pass-soft: #d7f5e9;
+
+  /* type */
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── TWO faces for the entire page ──────────────────────────────────────
+   One sans (Bricolage Grotesque) carries everything: hero to caption. The
+   mono appears only where the content is machine output. Do not introduce
+   a third family — mixing two sans faces is what made the page look
+   inconsistent in the first place.
+   ─────────────────────────────────────────────────────────────────────── */
+body {
+  background: var(--color-white);
+  color: var(--color-ink);
+  font-family: var(--font-sans-brand), var(--font-sans);
+}
+
+/* Display treatment — a weight/tracking modifier, not a different family. */
+.font-display {
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+/* The one exception: machine output. */
+.font-data {
+  font-family: var(--font-data), var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+.label {
+  font-family: var(--font-data), var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* focus ring — accessible, on-brand */
+:where(a, button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-cyan);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* utility: fine hairline used across sections */
+.hairline {
+  border-color: var(--color-line);
+}
+
+/* ── two effects live here rather than in app/v2/v2.css because the version
+   switch pill uses them on BOTH landing pages (E29 radar ping, E50 nudge).
+   Everything else animated is scoped to /v2. ── */
+@keyframes fx-ping {
+  0%        { transform: scale(1); opacity: 0.55; }
+  75%, 100% { transform: scale(2.6); opacity: 0; }
+}
+.fx-ping { animation: fx-ping 1.9s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+.fx-nudge { transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.group:hover .fx-nudge { transform: translateX(3px); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Engine-room diagram (components/landing/Kernel.tsx)
+   The only motion on the v1 page. Data visibly travelling the rails is the
+   whole point of the diagram, so it stays; nothing here pulses or throbs.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Pipe dots — harvested from nexus/apps/web/app/globals.css (`pipe-dot-*`,
+   `bus-flow-dot`), recoloured to the OPTIMUS palette. */
+@keyframes fx-dot-x {
+  0%        { left: -3px; opacity: 0; }
+  12%, 88%  { opacity: 1; }
+  100%      { left: 100%; opacity: 0; }
+}
+@keyframes fx-dot-y {
+  0%        { top: -3px; opacity: 0; }
+  12%, 88%  { opacity: 1; }
+  100%      { top: 100%; opacity: 0; }
+}
+/* The shared bus: each dot starts at its own offset and overshoots far right;
+   the track clips it. One keyframe serves every lane. */
+@keyframes fx-bus {
+  0%        { transform: translateX(0); opacity: 0; }
+  8%, 70%   { opacity: 1; }
+  100%      { transform: translateX(1400px); opacity: 0; }
+}
+/* Longhand, not shorthand: two var() time values in an `animation:` shorthand
+   are ambiguous to parse (duration vs delay). */
+.fx-dot-x, .fx-dot-y, .fx-bus {
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-duration: var(--fx-dur, 2.6s);
+  animation-delay: var(--fx-d, 0s);
+}
+.fx-dot-x { animation-name: fx-dot-x; }
+.fx-dot-y { animation-name: fx-dot-y; }
+.fx-bus   { animation-name: fx-bus; animation-duration: var(--fx-dur, 6s); }
+
+/* Relaxed underglow on the kernel card — a resting state, not a heartbeat.
+   Static: the card reads as "solid and lit", never as "throbbing". */
+.underglow {
+  border: 1.5px solid rgba(6, 182, 212, 0.38);
+  box-shadow:
+    0 0 0 5px rgba(6, 182, 212, 0.045),
+    0 2px 4px rgba(11, 13, 14, 0.03),
+    0 26px 60px -32px rgba(6, 182, 212, 0.5);
+}
+
+/* Icon lifts a little when its row is hovered. Named distinctly from v2's
+   `.fx-bounce` (a keyframe bounce) so the two never collide on /v2. */
+.fx-lift-icon { transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.group:hover .fx-lift-icon { transform: translateY(-2px); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Card hover — lift + underglow, and nothing else.
+   Deliberately NOT cursor-tracking: no spotlight following the pointer
+   inside the card, no border lit at the touch point. The card responds to
+   being hovered, not to where the cursor is within it.
+   ═══════════════════════════════════════════════════════════════════════ */
+.card-lift {
+  transition:
+    transform 0.42s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.42s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.42s ease;
+}
+.card-lift:hover {
+  transform: translateY(-4px);
+  border-color: rgba(6, 182, 212, 0.42);
+  box-shadow:
+    0 1px 2px rgba(11, 13, 14, 0.04),
+    0 24px 50px -28px rgba(6, 182, 212, 0.55);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Hero card only — cursor-following treatment.
+   --rx/--ry/--mx/--my are written by <Tilt> in components/landing/motion.tsx.
+   ═══════════════════════════════════════════════════════════════════════ */
+.tilt {
+  transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* soft wash that follows the pointer across the card */
+.spot { position: relative; }
+.spot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  background: radial-gradient(
+    340px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--color-cyan) 13%, transparent),
+    transparent 66%
+  );
+}
+.spot:hover::before { opacity: 1; }
+
+/* border lit at the point of contact */
+.edge { position: relative; }
+.edge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  background: radial-gradient(
+    280px circle at var(--mx, 50%) var(--my, 50%),
+    var(--color-cyan),
+    transparent 62%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+}
+.edge:hover::after { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Footer wordmark — cyan plasma illuminating the letters from below.
+
+   Three background layers, all clipped to the glyphs:
+     1. an SVG fractalNoise filter recoloured to cyan — the electric
+        filaments. `stitchTiles='stitch'` makes the tile seamless, so it can
+        drift horizontally forever without a visible seam. Its own internal
+        mask fades it out toward the top of the letters.
+     2. a cyan wash rising from the baseline — the ambient illumination.
+     3. a flat near-white grey — the unlit body of the letters.
+   drop-shadow adds the bloom that escapes the glyph edges.
+   ═══════════════════════════════════════════════════════════════════════ */
+.wordmark {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='300'%3E%3Cdefs%3E%3Cfilter id='e' color-interpolation-filters='sRGB' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.014 0.055' numOctaves='5' seed='9' stitchTiles='stitch' result='n'/%3E%3CfeColorMatrix in='n' type='matrix' values='0 0 0 0 0.13 0 0 0 0 0.83 0 0 0 0 0.93 1.95 0 0 0 -0.84'/%3E%3C/filter%3E%3ClinearGradient id='g' x1='0' y1='1' x2='0' y2='0'%3E%3Cstop offset='0' stop-color='%23fff' stop-opacity='1'/%3E%3Cstop offset='0.45' stop-color='%23fff' stop-opacity='0.6'/%3E%3Cstop offset='1' stop-color='%23fff' stop-opacity='0'/%3E%3C/linearGradient%3E%3Cmask id='m'%3E%3Crect width='600' height='300' fill='url(%23g)'/%3E%3C/mask%3E%3C/defs%3E%3Crect width='600' height='300' filter='url(%23e)' mask='url(%23m)'/%3E%3C/svg%3E"),
+    linear-gradient(
+      to top,
+      rgba(34, 211, 238, 0.62) 0%,
+      rgba(34, 211, 238, 0.30) 22%,
+      rgba(34, 211, 238, 0.08) 42%,
+      rgba(34, 211, 238, 0) 60%
+    ),
+    linear-gradient(to bottom, #eef1f4 0%, #e9eef1 100%);
+  background-size: 600px 62%, 100% 100%, 100% 100%;
+  background-position: 0 100%, 0 0, 0 0;
+  background-repeat: repeat-x, no-repeat, no-repeat;
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  /* No drop-shadow. The illumination stays INSIDE the glyphs — a bloom
+     escaping the letterforms turned the whole footer hazy. */
+
+  /* Elongated vertically. Bricolage has a width axis but no height axis, so
+     this is a paint transform.
+
+     Origin is the TOP, so the glyphs grow downward into the padding below —
+     growing from the bottom pushed them up into the footer links, since a
+     transform doesn't affect layout and nothing reserved the space. */
+  transform: scaleY(1.15);
+  transform-origin: top center;
+
+  animation: wordmark-drift 34s linear infinite;
+}
+/* one full tile width, so the loop is seamless */
+@keyframes wordmark-drift {
+  to { background-position: 600px 100%, 0 0, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

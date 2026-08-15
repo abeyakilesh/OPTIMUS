@@ -1,0 +1,28 @@
+# Reusable · GATE 1 — build, typecheck, lint.
+name: "gate:build"
+on:
+  workflow_call:
+    outputs:
+      build-artifact:
+        description: Name of the uploaded .next artifact
+        value: next-build
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build · typecheck · lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: .next
+          retention-days: 3
