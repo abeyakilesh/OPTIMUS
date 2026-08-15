@@ -23,7 +23,7 @@ jobs:
       # typecheck then verifies, so route-level type errors are caught too.
       - run: npm run build
       - run: npm run typecheck
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: next-build
           path: .next

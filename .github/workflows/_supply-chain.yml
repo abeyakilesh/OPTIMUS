@@ -24,7 +24,7 @@ jobs:
             --failOn "AGPL-1.0;AGPL-3.0;GPL-2.0;GPL-3.0;SSPL-1.0;BUSL-1.1;Elastic-2.0"
       - name: SBOM (CycloneDX)
         run: npx --yes @cyclonedx/cyclonedx-npm --output-file sbom.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.json
