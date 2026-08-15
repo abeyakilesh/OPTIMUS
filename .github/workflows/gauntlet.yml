@@ -37,7 +37,7 @@ jobs:
       deps: ${{ steps.f.outputs.deps }}
       docs-only: ${{ steps.f.outputs.docs-only }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: f
         uses: ./.github/actions/ci-filter
 
