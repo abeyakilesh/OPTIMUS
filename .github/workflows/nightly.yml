@@ -1,0 +1,47 @@
+# Deep scans that are too slow for every PR.
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  static-security:
+    uses: ./.github/workflows/_static-security.yml
+
+  supply-chain:
+    uses: ./.github/workflows/_supply-chain.yml
+
+  stale-dependencies:
+    name: outdated dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Report drift
+        run: npm outdated || true
+
+  # GATE 12 · dynamic security — UNAVAILABLE.
+  # strix / hexstrike need a deployed preview to attack. There isn't one yet.
+  # This job exists to state that, not to fake it.
+  dynamic-security:
+    name: "12 · dynamic security (UNAVAILABLE)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Explain why this is not running
+        run: |
+          {
+            echo "### Gate 12 · dynamic security — NOT RUN"
+            echo
+            echo "strix / hexstrike require a deployed preview environment."
+            echo "None exists yet. This job deliberately does no scanning and"
+            echo "claims no result. It becomes real when ephemeral previews"
+            echo "(coolify / codesandbox) are wired up."
+          } >> "$GITHUB_STEP_SUMMARY"

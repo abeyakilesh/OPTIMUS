@@ -1,0 +1,20 @@
+# ast-grep configuration.
+#
+# HARVEST from ast-grep-essentials (Prime Directive: take the data, drop the
+# app). The rules directory is vendored, not submoduled, so a change upstream
+# can never silently alter what CI enforces here.
+#
+# Provenance: copied from `ast-grep-essentials-main/` in the workspace. That
+# copy is an unpacked archive with no .git, so there is no upstream commit SHA
+# to pin. Re-vendoring from a proper clone would let us record one — tracked
+# as a follow-up, not silently ignored.
+#
+# COUNT — be precise about this. The upstream repo contains 554 .yml files,
+# but that total is rules + their test fixtures + config. The actual rule
+# count is 184. Of those, 13 target JavaScript/TypeScript, which is all that
+# applies to this repo today; the rest (python, java, go, ruby, c/cpp, rust,
+# c#, swift, kotlin, php, scala) activate as engines get bundled.
+ruleDirs:
+  - rules
+utilDirs:
+  - utils

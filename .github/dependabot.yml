@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Actions are referenced by tag today. Dependabot rewrites them to pinned
+  # commit SHAs, which is the supply-chain posture Stirling-PDF uses in this
+  # workspace and what OSSF Scorecard checks for.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
+    labels: ["ci", "dependencies"]
+    commit-message: { prefix: "ci" }
+
+  - package-ecosystem: npm
+    directory: "/"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message: { prefix: "deps" }
+    groups:
+      next:
+        patterns: ["next", "react", "react-dom", "@types/react*"]
+      tooling:
+        patterns: ["eslint*", "typescript", "vitest", "@playwright/*", "@ast-grep/*"]

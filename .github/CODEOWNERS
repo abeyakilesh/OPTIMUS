@@ -1,0 +1,9 @@
+# Everything needs an owner's review.
+*                       @abeyakilesh
+
+# The parts where a silent change is most dangerous.
+/.github/               @abeyakilesh
+/scripts/               @abeyakilesh
+/rules/                 @abeyakilesh
+/CI_STATUS.md           @abeyakilesh
+/CLAUDE.md              @abeyakilesh

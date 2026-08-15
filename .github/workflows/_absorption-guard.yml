@@ -1,0 +1,32 @@
+# Reusable · OPTIMUS-SPECIFIC — enforces the absorption workflow itself.
+#
+# This is the gate no upstream repo has, because it encodes CLAUDE.md's own
+# rules: one repo per PR, an honest Absorption Score with its breakdown, and
+# no UI claiming a capability that isn't wired (Prime Directive #4).
+name: "gate:absorption-guard"
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    name: absorption rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Check PR against the absorption rules
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/absorption-guard.mjs

@@ -1,0 +1,116 @@
+# ══════════════════════════════════════════════════════════════════════════
+# THE GAUNTLET — the single required check on every pull request.
+#
+# This is an ORCHESTRATOR. Each gate lives in its own reusable workflow
+# (`_*.yml`) so it can be run, tested and reasoned about independently —
+# the pattern used by n8n, langflow and supabase in this workspace.
+#
+# Rule one: no placeholder gates. Every job here runs a real tool against
+# real code and can really fail. The five gates from CLAUDE.md that have
+# nothing to test yet are NOT here as green jobs — `coverage` prints them as
+# explicitly absent on every run.
+# ══════════════════════════════════════════════════════════════════════════
+name: Gauntlet
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:          # required for a merge queue
+  push:
+    branches: [main]
+
+concurrency:
+  group: gauntlet-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Which gates does this diff actually need?
+  filter:
+    name: change detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.f.outputs.app }}
+      deps: ${{ steps.f.outputs.deps }}
+      docs-only: ${{ steps.f.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: f
+        uses: ./.github/actions/ci-filter
+
+  # ── gates that respond to change detection ──────────────────────────────
+  build:
+    needs: filter
+    if: needs.filter.outputs.docs-only == 'false'
+    uses: ./.github/workflows/_build.yml
+
+  unit:
+    needs: filter
+    if: needs.filter.outputs.docs-only == 'false'
+    uses: ./.github/workflows/_unit.yml
+
+  e2e:
+    needs: [filter, build]
+    if: needs.filter.outputs.app == 'true'
+    uses: ./.github/workflows/_e2e.yml
+
+  perf:
+    needs: [filter, build]
+    if: needs.filter.outputs.app == 'true'
+    uses: ./.github/workflows/_perf.yml
+
+  supply-chain:
+    needs: filter
+    if: needs.filter.outputs.deps == 'true' || github.event_name == 'push'
+    uses: ./.github/workflows/_supply-chain.yml
+
+  # ── gates that ALWAYS run ───────────────────────────────────────────────
+  # Security is never filtered. "It's only a config change" is exactly how a
+  # secret or a malicious dependency gets in.
+  static-security:
+    uses: ./.github/workflows/_static-security.yml
+
+  ai-review:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/_ai-review.yml
+    secrets: inherit
+
+  absorption:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/_absorption-guard.yml
+
+  # ── the honest ledger ───────────────────────────────────────────────────
+  coverage:
+    name: gate coverage (read me)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: [build, unit, static-security, supply-chain, e2e, perf, ai-review, absorption]
+    steps:
+      - name: Report what is and isn't enforced
+        run: |
+          {
+            echo "## Gauntlet coverage"
+            echo
+            echo "**Enforced this run:** 1 build · 2 unit · 3 static-security · 4 ai-review · 5 supply-chain · 8 perf · 11 e2e"
+            echo
+            echo "### NOT enforced — absent, not passing"
+            echo "| Gate | Blocked on | Unblocks when |"
+            echo "|---|---|---|"
+            echo "| 6 · fidelity vs parent | nothing absorbed yet | first repo clears Phase B |"
+            echo "| 7 · verification self-eval | harbor not integrated | K5 exists |"
+            echo "| 9 · scalability smoke | no service surface | first real service ships |"
+            echo "| 10 · isolation invariants | no sandbox | K4 + microVM land |"
+            echo "| 12 · dynamic security | no preview deploy | ephemeral previews exist |"
+            echo
+            echo "See \`CI_STATUS.md\`. Do not mark a capability AVAILABLE while a gate it depends on is listed here."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if any required gate failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "::error::A required gate failed. Nothing merges red."
+          exit 1

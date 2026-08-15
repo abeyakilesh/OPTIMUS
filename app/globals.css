@@ -88,9 +88,7 @@ body {
   border-color: var(--color-line);
 }
 
-/* ── two effects live here rather than in app/v2/v2.css because the version
-   switch pill uses them on BOTH landing pages (E29 radar ping, E50 nudge).
-   Everything else animated is scoped to /v2. ── */
+/* ── radar ping + arrow nudge, used by the status dots and link arrows ── */
 @keyframes fx-ping {
   0%        { transform: scale(1); opacity: 0.55; }
   75%, 100% { transform: scale(2.6); opacity: 0; }
@@ -147,8 +145,7 @@ body {
     0 26px 60px -32px rgba(6, 182, 212, 0.5);
 }
 
-/* Icon lifts a little when its row is hovered. Named distinctly from v2's
-   `.fx-bounce` (a keyframe bounce) so the two never collide on /v2. */
+/* Icon lifts a little when its card or row is hovered. */
 .fx-lift-icon { transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 .group:hover .fx-lift-icon { transform: translateY(-2px); }
 

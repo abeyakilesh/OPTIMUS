@@ -1,52 +1,106 @@
 # CI status — the honest ledger
 
-`CLAUDE.md` specifies a 12-check gauntlet. **7 of the 12 are live and can fail
-your PR today. 5 are not implemented**, because there is nothing real for them
-to test yet.
+`CLAUDE.md` specifies a 12-check gauntlet. **7 are live and can fail your PR
+today. 5 are not implemented**, because there is nothing real for them to test
+yet — and one gate exists that the build bible didn't ask for.
 
-They are deliberately *absent* from the workflow rather than stubbed green.
-A gate that always passes is worse than no gate: it manufactures confidence.
-This is Prime Directive #4 applied to CI — if a check isn't really running,
-never render it as passing.
+The five missing gates are deliberately *absent* from the pipeline rather than
+stubbed green. A gate that always passes is worse than no gate: it manufactures
+confidence. That is Prime Directive #4 applied to CI.
+
+## Structure
+
+Modelled on the deepest pipelines in the workspace (n8n · 85 workflows,
+langflow · 49, supabase · 47, Stirling-PDF · 42):
+
+```
+.github/
+  actions/
+    setup/         composite — harden runner, Node, caches, npm ci
+    ci-filter/     composite — change detection (dorny/paths-filter)
+  workflows/
+    gauntlet.yml            orchestrator · the one required check
+    _build.yml              ┐
+    _unit.yml               │
+    _static-security.yml    │ reusable (workflow_call), each independently
+    _supply-chain.yml       │ runnable and testable
+    _e2e.yml                │
+    _perf.yml               │
+    _ai-review.yml          │
+    _absorption-guard.yml   ┘ OPTIMUS-specific
+    nightly.yml             scheduled deep scans
+    scorecard.yml           OSSF supply-chain posture
+scripts/absorption-guard.mjs
+```
+
+Techniques adopted from those repos: **reusable workflows** (117 of the 927
+workflows on disk use `workflow_call`), **composite actions** (104),
+**`step-security/harden-runner`** egress control, **change detection**,
+**`merge_group`** for merge queues, per-job least-privilege `permissions:`,
+and `timeout-minutes` on every job.
 
 ## Live gates — these block a merge
 
-| # | Gate | Tool | Fails when |
-|---|---|---|---|
-| 1 | Build · typecheck · lint | `next build`, `tsc --noEmit`, `eslint` | compile error, type error, lint error |
-| 2 | Unit + contract tests | `vitest` | any test fails |
-| 3 | Static security | `gitleaks` · `npm audit` · `ast-grep` | a secret, a high/critical CVE, or any of the 554 structural rules matching |
-| 4 | AI security review | `claude-code-security-review` | a finding on the diff — **or if `ANTHROPIC_API_KEY` is unset** |
-| 5 | Licenses + SBOM | `license-checker` · `cyclonedx` | an AGPL/GPL/SSPL/BUSL/Elastic dep enters the tree |
-| 8 | Performance budgets | Lighthouse CI | a budget in `lighthouserc.json` regresses |
-| 11 | End-to-end | Playwright | the landing page fails its smoke assertions |
+| # | Gate | Tool | Fails when | Verified? |
+|---|---|---|---|---|
+| 1 | Build · typecheck · lint | `next build`, `tsc --noEmit`, `eslint` | compile/type/lint error | ✅ runs clean locally |
+| 2 | Unit + contract | `vitest` | any test fails | ✅ 7 tests passing |
+| 3 | Static security | `gitleaks` · `npm audit` · `ast-grep` · CodeQL | secret, high CVE, rule match | ✅ **proved it fires** — planted a weak RSA key, exit 1; clean tree, exit 0 |
+| 4 | AI security review | `claude-code-security-review` | finding on the diff, **or key unset** | ⚠️ needs `ANTHROPIC_API_KEY` |
+| 5 | Licenses + SBOM | `license-checker` · `cyclonedx` | AGPL/GPL/SSPL/BUSL/Elastic enters the tree | not yet run in CI |
+| 8 | Performance budgets | Lighthouse CI | a budget in `lighthouserc.json` regresses | not yet run in CI |
+| 11 | End-to-end | Playwright | landing page smoke fails | written, not yet run in CI |
+| — | **Absorption guard** | `scripts/absorption-guard.mjs` | inflated score, missing breakdown, 2 repos in 1 PR, silently weakened gauntlet | ✅ **proved it fires** — 5 scenarios tested |
+
+## Correction: the rule count is 184, not 554
+
+`CLAUDE.md` says ast-grep-essentials provides "554 structural code rules". That
+figure counts every `.yml` in the repo — rules **plus their test fixtures plus
+config**. The real numbers:
+
+| | Count |
+|---|---|
+| `.yml` files in the upstream repo | 554 |
+| **Actual rules** (`rules/`) | **184** |
+| Rules that apply to this repo today (JS/TS/HTML) | **14** |
+| Staged for later (`.rules-staged/`) — python, java, go, ruby, c/cpp, rust, c#, swift, kotlin, php, scala | 170 |
+
+The staged rules activate as engines in those languages get bundled. They are
+not deleted, just not scanned, because scanning rules for languages the repo
+doesn't contain is noise that trains people to ignore the gate.
+
+**87 of the vendored rules also had to be repaired**: they used utility ids
+containing reserved characters (`PATTERN_require("crypto")`), which the current
+ast-grep CLI rejects outright — the scanner refused to start. Ids were
+sanitized to valid identifiers; rule logic is unchanged.
 
 ## Not implemented — absent, not passing
 
 | # | Gate | Blocked on | Unblocks when |
 |---|---|---|---|
-| 6 | Fidelity vs parent repo | No capability has been absorbed yet, so there is no parent behaviour to diff against | first repo completes Phase B of the onboarding pipeline |
-| 7 | Verification self-eval | `harbor` is not integrated | K5 (verification spine) exists |
-| 9 | Scalability smoke | Nothing to load-test — the app is a static landing page | first real service surface ships |
-| 10 | Isolation invariants | No sandbox to escape | K4 (execution scheduler) + codesandbox microVM land |
-| 12 | Dynamic security | No deployed preview to attack | ephemeral preview deploys exist (coolify/codesandbox) |
+| 6 | Fidelity vs parent | Nothing absorbed yet, so no parent behaviour to diff | first repo clears Phase B |
+| 7 | Verification self-eval | `harbor` not integrated | K5 exists |
+| 9 | Scalability smoke | Nothing to load-test — static landing page | first real service surface |
+| 10 | Isolation invariants | No sandbox to escape | K4 + codesandbox microVM |
+| 12 | Dynamic security | No deployed preview to attack | ephemeral previews (coolify) |
 
-Each one becomes a required check the moment its blocker clears. Do not mark a
-capability AVAILABLE while a gate it depends on is on this list.
+Do not mark a capability AVAILABLE while a gate it depends on is on this list.
 
-## Setup still required by a human
+## Human setup still required
 
-These cannot be done from the repo and need you in the GitHub UI:
-
-1. **`ANTHROPIC_API_KEY` secret** — Settings → Secrets and variables → Actions.
-   Until it's set, gate 4 fails every PR **on purpose**.
-2. **Branch protection on `main`** — see `.github/branch-protection.md`.
-   Cannot be enabled until `main` exists on the remote with at least one run of
-   the gauntlet, so GitHub knows the check names.
+1. **`ANTHROPIC_API_KEY`** secret → Settings → Secrets and variables → Actions.
+   Gate 4 fails every PR until then, **on purpose**.
+2. **Branch protection** → `.github/branch-protection.md`. Needs one Gauntlet
+   run on `main` first so GitHub knows the check names.
+3. **Labels** → `npx github-label-sync --labels .github/labels.yml abeyakilesh/OPTIMUS`
+4. **Pin actions to SHAs** — currently version tags. Dependabot is configured
+   to rewrite them.
+5. **Flip `harden-runner` to `block`** once audit logs reveal the real egress
+   allow-list.
 
 ## Absorption score
 
-No repo has been absorbed. Every repo on the list is at **0/100** — which is a
-valid, honest score meaning "issue not opened yet", per the rubric in
-`CLAUDE.md`. The first score above zero requires a merged PR with fidelity
-evidence.
+No repo absorbed. Every repo sits at **0/100** — valid and honest, meaning
+"issue not opened". The first non-zero score requires a merged PR with real
+fidelity evidence, and `absorption-guard.mjs` will reject the PR if the
+arithmetic doesn't add up or Safety is claimed as partial credit.

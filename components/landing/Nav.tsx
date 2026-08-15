@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Logo, ChevronDown, Globe } from "./Icons";
-import VersionSwitch from "../VersionSwitch";
 
 const LINKS = ["Product", "Solutions", "Resources"] as const;
 
@@ -63,9 +62,6 @@ export default function Nav() {
           >
             Get started free
           </a>
-
-          {/* top-right corner — jump to the animated landing page */}
-          <VersionSwitch to="v2" />
 
           <button
             onClick={() => setOpen((v) => !v)}
