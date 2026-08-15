@@ -1,10 +1,25 @@
 # Reusable · GATE 4 — AI security review of the diff.
-# Fails loudly when ANTHROPIC_API_KEY is missing. An unconfigured security
-# gate must never render as a pass (Prime Directive #4).
+#
+# Runs WITHOUT a paid Anthropic key. OmniRoute is installed inside the job as
+# a local child process and fronts the free provider tiers (Groq / Mistral /
+# Gemini) behind an Anthropic-compatible `/v1/messages` endpoint on
+# localhost:20128. Claude Code honours ANTHROPIC_BASE_URL, so the reviewer
+# talks to the gateway instead of api.anthropic.com.
+#
+# This is the same shape as production: OmniRoute BUNDLED as a local child
+# process, never an external API call, never exposed to the internet. The
+# runner reaches it on loopback only.
 name: "gate:ai-review"
+
 on:
   workflow_call:
     secrets:
+      GROQ_API_KEY:
+        required: false
+      MISTRAL_API_KEY:
+        required: false
+      GEMINI_API_KEY:
+        required: false
       ANTHROPIC_API_KEY:
         required: false
 
@@ -16,22 +31,74 @@ jobs:
   review:
     name: claude security review
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Require the key
+
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+
+      # Prefer a real Anthropic key if one is ever configured; otherwise fall
+      # back to the free gateway. Fail loudly if neither is available — an
+      # unconfigured security gate must never render as a pass.
+      - name: Choose a model backend
+        id: backend
         env:
-          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          if [ -z "$KEY" ]; then
-            echo "::error title=Gate 4 unconfigured::ANTHROPIC_API_KEY is not set."
-            echo "Settings → Secrets and variables → Actions → new repository secret."
-            echo "This gate fails by design until then — see CI_STATUS.md."
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "mode=anthropic" >> "$GITHUB_OUTPUT"
+            echo "Using a direct Anthropic key."
+          elif [ -n "$GROQ_API_KEY" ] || [ -n "$MISTRAL_API_KEY" ] || [ -n "$GEMINI_API_KEY" ]; then
+            echo "mode=omniroute" >> "$GITHUB_OUTPUT"
+            echo "Using the OmniRoute gateway over free provider tiers."
+          else
+            echo "::error title=Gate 4 unconfigured::No model backend available."
+            echo "Set ANTHROPIC_API_KEY, or any of GROQ_API_KEY / MISTRAL_API_KEY /"
+            echo "GEMINI_API_KEY, under Settings -> Secrets and variables -> Actions."
+            echo "This gate fails by design until then. See CI_STATUS.md."
             exit 1
           fi
-      - uses: anthropics/claude-code-security-review@main
+
+      - name: Start OmniRoute gateway
+        if: steps.backend.outputs.mode == 'omniroute'
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Bind to loopback only. Never expose the gateway off the runner.
+          HOST: 127.0.0.1
+          PORT: "20128"
+        run: |
+          npm i -g omniroute
+          nohup omniroute > /tmp/omniroute.log 2>&1 &
+          # Health-gate the startup rather than sleeping a fixed amount.
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:20128/v1/models >/dev/null 2>&1; then
+              echo "Gateway up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::OmniRoute did not become healthy in 60s."
+          tail -50 /tmp/omniroute.log
+          exit 1
+
+      - name: Review the diff
+        uses: anthropics/claude-code-security-review@main
+        env:
+          # Ignored when mode=anthropic (the action's own key wins).
+          ANTHROPIC_BASE_URL: ${{ steps.backend.outputs.mode == 'omniroute' && 'http://127.0.0.1:20128' || '' }}
+          ANTHROPIC_AUTH_TOKEN: ${{ steps.backend.outputs.mode == 'omniroute' && 'omniroute-local' || '' }}
         with:
-          claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-api-key: ${{ secrets.ANTHROPIC_API_KEY || 'omniroute-local' }}
           comment-pr: true
+
+      - name: Gateway logs on failure
+        if: failure() && steps.backend.outputs.mode == 'omniroute'
+        run: tail -100 /tmp/omniroute.log || true

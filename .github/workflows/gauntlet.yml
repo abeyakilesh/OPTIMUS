@@ -76,7 +76,7 @@ jobs:
   ai-review:
     if: github.event_name == 'pull_request'
     uses: ./.github/workflows/_ai-review.yml
-    secrets: inherit
+    secrets: inherit   # ANTHROPIC_API_KEY if set, else GROQ/MISTRAL/GEMINI
 
   absorption:
     if: github.event_name == 'pull_request'
