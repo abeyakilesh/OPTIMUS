@@ -3,17 +3,6 @@
     "strict": true,
     "contexts": [
       "change detection",
-      "build · typecheck · lint",
-      "unit + contract",
-      "secret scan",
-      "dependency CVEs",
-      "ast-grep (14 active rules)",
-      "CodeQL",
-      "licenses + SBOM",
-      "playwright",
-      "lighthouse budgets",
-      "claude security review",
-      "absorption rules",
       "gate coverage (read me)"
     ]
   },
