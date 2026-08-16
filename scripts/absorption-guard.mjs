@@ -16,32 +16,42 @@
  * without blocking ordinary product work.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 const body = process.env.PR_BODY ?? "";
 const title = process.env.PR_TITLE ?? "";
-const base = process.env.BASE_SHA;
-const head = process.env.HEAD_SHA;
 
 const errors = [];
 const warnings = [];
 
-const sh = (cmd) => {
+// A commit SHA is 7-40 hex characters and nothing else. Anything that fails
+// this never reaches git. NFR-19 says untrusted input is never interpolated
+// into a shell; this guard is itself CI code, so it holds itself to that.
+const sha = (value) => (/^[0-9a-f]{7,40}$/i.test(value ?? "") ? value : null);
+const base = sha(process.env.BASE_SHA);
+const head = sha(process.env.HEAD_SHA);
+
+if (process.env.BASE_SHA && !base) errors.push("BASE_SHA is not a valid commit SHA.");
+if (process.env.HEAD_SHA && !head) errors.push("HEAD_SHA is not a valid commit SHA.");
+
+// execFileSync with an argv array — no shell is spawned, so no argument can be
+// reinterpreted as a command regardless of what it contains.
+const git = (args) => {
   try {
-    return execSync(cmd, { encoding: "utf8" }).trim();
+    return execFileSync("git", args, { encoding: "utf8" }).trim();
   } catch {
     return "";
   }
 };
 
 const changed = base && head
-  ? sh(`git diff --name-only ${base} ${head}`).split("\n").filter(Boolean)
+  ? git(["diff", "--name-only", base, head]).split("\n").filter(Boolean)
   : [];
 
 /* ── 1 · nobody weakens the gauntlet ──────────────────────────────────── */
 const ciTouched = changed.filter((f) => f.startsWith(".github/workflows/"));
 if (ciTouched.length > 0) {
-  const diff = sh(`git diff ${base} ${head} -- .github/workflows/`);
+  const diff = git(["diff", base, head, "--", ".github/workflows/"]);
   // Lines being ADDED that neuter a gate.
   const added = diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++"));
   const neutering = added.filter((l) =>
