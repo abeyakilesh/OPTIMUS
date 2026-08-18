@@ -7,10 +7,19 @@
     ]
   },
   "enforce_admins": true,
+  "_comment_reviews": [
+    "required_approving_review_count is 0 because this is a ONE-DEVELOPER repo.",
+    "GitHub does not allow you to approve your own pull request, so requiring 1",
+    "approval on a solo repo is unsatisfiable: every PR would be permanently",
+    "unmergeable except by --admin bypass, which would turn the whole protection",
+    "config into theatre. The automated gauntlet is the reviewer here.",
+    "RAISE THIS TO 1 (and re-enable require_code_owner_reviews) the day a second",
+    "person gets write access. Everything else stays maximally strict."
+  ],
   "required_pull_request_reviews": {
     "dismiss_stale_reviews": true,
-    "require_code_owner_reviews": true,
-    "required_approving_review_count": 1
+    "require_code_owner_reviews": false,
+    "required_approving_review_count": 0
   },
   "restrictions": null,
   "required_linear_history": true,
