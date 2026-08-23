@@ -98,11 +98,18 @@ export class Scheduler {
     const maxParallel = Math.max(1, spec.maxParallel ?? spec.steps.length);
     const heldLocks = new Set<string>();
     const running = new Map<string, Promise<void>>();
+    const continuedNoted = new Set<string>();
 
+    // A dependency is satisfied when it passed or was memoised away. A FAILED
+    // dependency also counts as satisfied for a continue-on-error step —
+    // otherwise the step would sit pending forever, which is what
+    // continue-on-error exists to prevent.
     const dependenciesSatisfied = (step: StepSpec): boolean =>
       step.dependsOn.every((d) => {
         const s = status.get(d);
-        return s === "passed" || s === "skipped";
+        if (s === "passed" || s === "skipped") return true;
+        const settledBadly = s === "failed" || s === "budget-exhausted" || s === "blocked";
+        return Boolean(step.continueOnError) && settledBadly;
       });
 
     const dependencyFailed = (step: StepSpec): string | undefined =>
@@ -126,12 +133,17 @@ export class Scheduler {
 
         if (step.continueOnError) {
           // Recorded, never silent: the graph continues but the trace says why.
-          emit({
-            type: "step.blocked",
-            at: this.now(),
-            stepId: step.id,
-            because: `dependency ${failedDep} failed; continue-on-error, running anyway`,
-          });
+          // Emitted at most once — this scan re-runs every scheduling pass, and
+          // the step stays pending until it launches.
+          if (!continuedNoted.has(step.id)) {
+            continuedNoted.add(step.id);
+            emit({
+              type: "step.continued",
+              at: this.now(),
+              stepId: step.id,
+              because: `dependency ${failedDep} failed; continue-on-error, running anyway`,
+            });
+          }
         } else {
           status.set(step.id, "blocked");
           emit({

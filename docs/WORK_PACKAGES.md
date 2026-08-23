@@ -31,7 +31,7 @@ So this registry has three hard rules:
 | WP | Title | Priority | Status | Gate coverage | Branch |
 |---|---|---|---|---|---|
 | WP-000 | Landing page + CI gauntlet | P0 | ✅ **Done** | 7/12 live | `main` |
-| WP-001 | Kernel walking skeleton | P0 | 📋 Next | — | `feature/wp-001-skeleton` |
+| WP-001 | Kernel walking skeleton + multi-agent orchestration | P0 | 🔬 In review | 34 tests | `feature/wp-001-kernel` |
 | WP-002 | Browser capability (absorb browser-use) | P0 | ⏸ Blocked by WP-001 | — | — |
 | WP-003 | Extraction + schema verification (absorb Scrapling) | P0 | ⏸ Blocked by WP-001 | — | — |
 | WP-004 | Model layer (bundle OmniRoute) | P0 | ⏸ Blocked by WP-001 | — | — |
@@ -81,18 +81,25 @@ One step, one tool, one check.
 
 **Acceptance criteria — every one is a test that can fail**
 
-- [ ] **AC-1** Given the objective, when the mission runs, then an artifact exists whose sha256 matches the fixture's expected hash. *(test: `skeleton.e2e`)*
-- [ ] **AC-2** Given the tool declares `net:read`, when it attempts a filesystem write, then the write is refused and the step fails. *(test: `permission-boundary`)* — **satisfies FR-3**
-- [ ] **AC-3** Given the extracted title is corrupted before verification, when the check runs, then the step is marked failed and **the mission is not applied**. *(test: `fault-injection`)* — **satisfies FR-6, FR-7, PRD M2**
-- [ ] **AC-4** Given a step whose check can never pass, when it runs, then it terminates within `max_attempts` and `max_wall_time` and reports budget-exhausted. *(test: `budget-exhaustion`)* — **satisfies PRD M3**
-- [ ] **AC-5** Given a completed mission, when it is rolled back, then the on-disk state is byte-identical to the pre-state. *(test: `rollback`)* — **satisfies FR-9, PRD M4**
-- [ ] **AC-6** Given the mission's event log alone, when state is rebuilt from events, then it equals the live state. *(test: `event-fold`)* — **satisfies NFR-24**
-- [ ] **AC-7** Given the same fixture, when the mission is re-run, then the artifact hash is identical. *(test: `determinism`)* — **satisfies PRD M6**
-- [ ] **AC-8** Every step in the trace has inputs, tool version, exit code, duration, cost and artifact ids. *(test: `evidence-schema`)* — **satisfies FR-8, PRD M5**
+- [x] **AC-1** Given the objective, when the mission runs, then an artifact exists whose sha256 matches the fixture's expected hash. *(test: `skeleton.e2e`)*
+- [x] **AC-2** Given the tool declares `net:read`, when it attempts a filesystem write, then the write is refused and the step fails. *(test: `permission-boundary`)* — **satisfies FR-3**
+- [x] **AC-3** Given the extracted title is corrupted before verification, when the check runs, then the step is marked failed and **the mission is not applied**. *(test: `fault-injection`)* — **satisfies FR-6, FR-7, PRD M2**
+- [x] **AC-4** Given a step whose check can never pass, when it runs, then it terminates within `max_attempts` and `max_wall_time` and reports budget-exhausted. *(test: `budget-exhaustion`)* — **satisfies PRD M3**
+- [x] **AC-5** Given a completed mission, when it is rolled back, then the on-disk state is byte-identical to the pre-state. *(test: `rollback`)* — **satisfies FR-9, PRD M4**
+- [x] **AC-6** Given the mission's event log alone, when state is rebuilt from events, then it equals the live state. *(test: `event-fold`)* — **satisfies NFR-24**
+- [x] **AC-7** Given the same fixture, when the mission is re-run, then the artifact hash is identical. *(test: `determinism`)* — **satisfies PRD M6**
+- [x] **AC-8** Every step in the trace has inputs, tool version, exit code, duration, cost and artifact ids. *(test: `evidence-schema`)* — **satisfies FR-8, PRD M5**
 
 **Definition of done:** all 8 tests in CI, and **AC-3 demonstrated by video or
 terminal capture** — because "verification actually blocks" is the single claim
 the whole product rests on, and it should be visible, not just asserted.
+
+**Scope change — parallelism is IN.** The table above listed it as out. A
+single-agent loop is not the product being built; the goal is several agents
+working one objective at once. `kernel/scheduler.ts` therefore ships parallel
+DAG execution, `maxParallel`, resource locks, transitive failure propagation
+and per-agent repair strategies, with 12 orchestration tests holding them to
+the same standard as the ACs. Everything else in the "Out" column stays out.
 
 **Explicit non-goal:** it does not need a UI. A CLI that prints the trace is
 enough. Building Mission Control before the kernel works is the Atlas mistake.

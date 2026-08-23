@@ -21,6 +21,12 @@ export type KernelEvent =
       evidence: Evidence;
     }
   | { type: "step.blocked"; at: number; stepId: string; because: string }
+  /**
+   * A step whose dependency failed but which is declared continue-on-error.
+   * It is a DISTINCT event from `step.blocked`, because folding a blocked
+   * event would mark the step blocked — the opposite of what happened.
+   */
+  | { type: "step.continued"; at: number; stepId: string; because: string }
   | { type: "mission.finished"; at: number; missionId: string; status: "green" | "red" }
   | { type: "mission.rolled-back"; at: number; missionId: string };
 
@@ -93,6 +99,10 @@ export function fold(events: readonly KernelEvent[]): MissionState | undefined {
         if (step) step.status = "blocked";
         break;
       }
+      case "step.continued":
+        // Recorded in the trace, but it changes no state: the step still runs
+        // and its own outcome decides its status.
+        break;
       case "mission.finished":
         if (state) state.status = event.status;
         break;

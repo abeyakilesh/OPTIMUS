@@ -75,6 +75,11 @@ export class Harness {
 
     let attempt = 0;
     let cost = 0;
+    // Distinguishes "we stopped trying" from "we ran out of road". A step that
+    // fails its check on its only permitted attempt has NOT exhausted a
+    // budget — nothing ran away — and reporting it as budget-exhausted hides
+    // the real verdict from whoever reads the trace.
+    let gaveUp = false;
     let input = spec.input;
     let lastChecks: CheckResult[] = [];
     let lastError: string | undefined;
@@ -162,14 +167,23 @@ export class Harness {
       }
 
       // diagnose -> repair. No repair function, or a repair that declines,
-      // means further attempts would be identical: stop now.
-      if (!repair) break;
+      // means further attempts would be identical: stop now. That is a
+      // verdict, not an exhausted budget.
+      if (!repair) {
+        gaveUp = true;
+        break;
+      }
       const repaired = repair(input, observation, lastChecks);
-      if (repaired === undefined) break;
+      if (repaired === undefined) {
+        gaveUp = true;
+        break;
+      }
       input = repaired;
     }
 
-    const exhausted = attempt >= budget.maxAttempts;
+    // Only reaching the attempt ceiling WHILE still willing to retry counts as
+    // budget exhaustion.
+    const exhausted = !gaveUp && attempt >= budget.maxAttempts;
     return this.seal(
       exhausted ? "budget-exhausted" : "failed",
       spec,

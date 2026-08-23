@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:e2e": "playwright test",
-    "scan": "ast-grep scan --config sgconfig.yml"
+    "scan": "ast-grep scan --config sgconfig.yml",
+    "mission": "tsx kernel/cli.ts"
   },
   "dependencies": {
     "next": "16.3.1",
@@ -27,6 +28,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.12",
     "typescript": "^5",
     "vitest": "^4.1.11"
   }
