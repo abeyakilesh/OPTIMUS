@@ -4,12 +4,20 @@
 # AGPL and n8n as Sustainable Use — none may be linked into this artifact.
 #
 # The licence policy is asserted from the SBOM rather than from `npm ls`.
-# `license-checker` shells out to `npm ls --json --long --all`, which exits
-# ELSPROBLEMS whenever npm reports an extraneous or invalid optional platform
-# package — routine on CI, because the lockfile carries optional binaries for
-# every platform (sharp, lightningcss) and only one platform's set installs.
-# The gate was failing on an environment artefact, not on a licence.
 # Policy is unchanged: production deps only, same seven blocked identifiers.
+#
+# `npm ls` exits ELSPROBLEMS whenever npm reports an extraneous or invalid
+# OPTIONAL PLATFORM package. That is routine on CI: the lockfile carries
+# optional binaries for every platform (sharp, lightningcss) and only one
+# platform's set is ever installed. Both `license-checker` AND `cyclonedx-npm`
+# shell out to `npm ls`, so both die on it — moving from one to the other was
+# not enough, as PR #7 showed by failing at SBOM generation before the licence
+# check could run at all.
+#
+# `--ignore-npm-errors` is the documented flag for exactly this case: the tree
+# is still read from the lockfile, npm's non-zero exit is tolerated. It cannot
+# silently hollow out the gate — scripts/license-gate.mjs refuses to pass on an
+# SBOM with zero components, so a degraded SBOM fails loudly instead.
 name: "gate:supply-chain"
 on:
   workflow_call:
@@ -28,11 +36,11 @@ jobs:
 
       # Published artifact — the full tree, dev included.
       - name: SBOM (CycloneDX)
-        run: npx --yes @cyclonedx/cyclonedx-npm --output-file sbom.json
+        run: npx --yes @cyclonedx/cyclonedx-npm --ignore-npm-errors --output-file sbom.json
 
       # Policy scope — only what actually ships.
       - name: SBOM (production only)
-        run: npx --yes @cyclonedx/cyclonedx-npm --omit dev --output-file sbom-prod.json
+        run: npx --yes @cyclonedx/cyclonedx-npm --ignore-npm-errors --omit dev --output-file sbom-prod.json
 
       - name: Forbidden licenses
         run: node scripts/license-gate.mjs sbom-prod.json
