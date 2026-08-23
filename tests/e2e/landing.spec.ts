@@ -51,7 +51,15 @@ test.describe("landing page", () => {
 
   test("ships no fabricated testimonials", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText(/not inventing any/i)).toBeVisible();
+    // Assert the invariant, not the copy: a real quote renders as
+    // <figure><blockquote>. Until one is permitted there must be zero of them,
+    // and the reserved-slot placeholder must be showing in their place.
+    // (This test previously matched an exact sentence and silently rotted when
+    // the copy was rewritten — hence checking structure instead.)
+    await expect(page.locator("blockquote")).toHaveCount(0);
+    await expect(
+      page.getByText(/space reserved for a real customer quote/i).first(),
+    ).toBeVisible();
   });
 
   test("has no console errors", async ({ page }) => {

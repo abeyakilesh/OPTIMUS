@@ -2,6 +2,14 @@
 # OPTIMUS ships as ONE standalone deployable, so a copyleft dep entering the
 # tree is a real licensing problem. CLAUDE.md flags Fincept/firecrawl/maxun as
 # AGPL and n8n as Sustainable Use — none may be linked into this artifact.
+#
+# The licence policy is asserted from the SBOM rather than from `npm ls`.
+# `license-checker` shells out to `npm ls --json --long --all`, which exits
+# ELSPROBLEMS whenever npm reports an extraneous or invalid optional platform
+# package — routine on CI, because the lockfile carries optional binaries for
+# every platform (sharp, lightningcss) and only one platform's set installs.
+# The gate was failing on an environment artefact, not on a licence.
+# Policy is unchanged: production deps only, same seven blocked identifiers.
 name: "gate:supply-chain"
 on:
   workflow_call:
@@ -17,15 +25,22 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-      - name: Forbidden licenses
-        run: |
-          npx --yes license-checker-rseidelsohn \
-            --production --excludePrivatePackages \
-            --failOn "AGPL-1.0;AGPL-3.0;GPL-2.0;GPL-3.0;SSPL-1.0;BUSL-1.1;Elastic-2.0"
+
+      # Published artifact — the full tree, dev included.
       - name: SBOM (CycloneDX)
         run: npx --yes @cyclonedx/cyclonedx-npm --output-file sbom.json
+
+      # Policy scope — only what actually ships.
+      - name: SBOM (production only)
+        run: npx --yes @cyclonedx/cyclonedx-npm --omit dev --output-file sbom-prod.json
+
+      - name: Forbidden licenses
+        run: node scripts/license-gate.mjs sbom-prod.json
+
       - uses: actions/upload-artifact@v4
         with:
           name: sbom
-          path: sbom.json
+          path: |
+            sbom.json
+            sbom-prod.json
           retention-days: 90
