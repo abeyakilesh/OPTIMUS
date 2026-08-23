@@ -20,20 +20,19 @@ export default function Stats() {
 
         <dl className="mt-10 grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
           {STATS.map((s) => (
-            <div key={s.label}>
-              <span className="block h-px w-full bg-cyan" />
+            <div key={s.label} className="border-t border-cyan">
               <dt className="font-display mt-5 text-[clamp(2.4rem,4.4vw,3.1rem)] leading-none text-white tabular-nums">
                 <CountUp to={s.to} suffix={s.suffix} duration={1700} />
               </dt>
               <dd className="mt-3">
                 <span className="block text-[13.5px] font-medium text-white/90">{s.label}</span>
-                <span className="mt-1 block font-data text-[11px] text-white/40">{s.sub}</span>
+                <span className="mt-1 block font-data text-[11px] text-white/55">{s.sub}</span>
               </dd>
             </div>
           ))}
         </dl>
 
-        <p className="mt-12 text-center font-data text-[11px] text-white/35">
+        <p className="mt-12 text-center font-data text-[11px] text-white/55">
           Counted from 107 analysed repositories · 62 on the absorption list ·
           nothing is marked available until its proof gate is green
         </p>

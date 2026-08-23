@@ -47,9 +47,9 @@ and `timeout-minutes` on every job.
 | 2 | Unit + contract | `vitest` | any test fails | ✅ 7 tests passing |
 | 3 | Static security | `gitleaks` · `npm audit` · `ast-grep` · CodeQL | secret, high CVE, rule match | ✅ **proved it fires** — planted a weak RSA key, exit 1; clean tree, exit 0 |
 | 4 | AI security review | `claude-code-security-review` | finding on the diff, **or key unset** | ⚠️ needs `ANTHROPIC_API_KEY` |
-| 5 | Licenses + SBOM | `license-checker` · `cyclonedx` | AGPL/GPL/SSPL/BUSL/Elastic enters the tree | not yet run in CI |
-| 8 | Performance budgets | Lighthouse CI | a budget in `lighthouserc.json` regresses | not yet run in CI |
-| 11 | End-to-end | Playwright | landing page smoke fails | written, not yet run in CI |
+| 5 | Licenses + SBOM | `cyclonedx` + `scripts/license-gate.mjs` | AGPL/GPL/SSPL/BUSL/Elastic enters the tree | ✅ **proved it fires** — 5 scenarios, incl. LGPL-3.0 correctly *allowed* and `MIT OR GPL-3.0-or-later` correctly blocked |
+| 8 | Performance budgets | Lighthouse CI | a budget in `lighthouserc.json` regresses | ✅ **caught a real defect** — a11y was 0.92 vs the 0.95 budget; fixed to 1.00 |
+| 11 | End-to-end | Playwright | landing page smoke fails | ✅ 6 tests passing — first real run caught a test that had rotted against rewritten copy |
 | — | **Absorption guard** | `scripts/absorption-guard.mjs` | inflated score, missing breakdown, 2 repos in 1 PR, silently weakened gauntlet | ✅ **proved it fires** — 5 scenarios tested |
 
 ## Correction: the rule count is 184, not 554
@@ -86,10 +86,27 @@ sanitized to valid identifiers; rule logic is unchanged.
 
 Do not mark a capability AVAILABLE while a gate it depends on is on this list.
 
+## Gate 3 · CodeQL
+
+CodeQL's `analyze` step was failing at SARIF upload with *"Code scanning is
+not enabled for this repository."* That was never a code defect: code scanning
+on a **private** repo requires GitHub Advanced Security, and is free only on
+public ones.
+
+**Resolved 2026-08-23 by making the repository public.** Code scanning must
+still be switched on once under Settings → Code security → Code scanning; after
+that the gate runs on every PR at no cost.
+
+All four static-security layers are then live: CodeQL, ast-grep (14 active
+rules), gitleaks, and dependency CVEs.
+
 ## Human setup still required
 
-1. **`ANTHROPIC_API_KEY`** secret → Settings → Secrets and variables → Actions.
-   Gate 4 fails every PR until then, **on purpose**.
+1. **One model key** → Settings → Secrets and variables → Actions. Gate 4
+   fails every PR until then, **on purpose**. It does *not* need a paid
+   Anthropic key: `GROQ_API_KEY`, `GEMINI_API_KEY` or `MISTRAL_API_KEY` all
+   work, routed through the bundled OmniRoute gateway on loopback. Any one
+   of the four is enough.
 2. **Branch protection** → `.github/branch-protection.md`. Needs one Gauntlet
    run on `main` first so GitHub knows the check names.
 3. **Labels** → `npx github-label-sync --labels .github/labels.yml abeyakilesh/OPTIMUS`
