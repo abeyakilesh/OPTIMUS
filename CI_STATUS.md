@@ -86,6 +86,27 @@ sanitized to valid identifiers; rule logic is unchanged.
 
 Do not mark a capability AVAILABLE while a gate it depends on is on this list.
 
+## Gate 4 · scoped away from dependency bots
+
+Gate 4 does **not** run on PRs opened by `dependabot[bot]`. Recorded here so it
+is a decision, not a surprise:
+
+- A bot PR's diff is a **lockfile**. The two risks it can carry are a known CVE
+  and a forbidden licence. Both already have dedicated, deterministic, free
+  gates that *do* run on those PRs — `dependency CVEs` (gate 3) and
+  `licenses + SBOM` (gate 5). An LLM reading a version number proves nothing
+  those two haven't already proven.
+- GitHub deliberately withholds Actions secrets from Dependabot. Running the
+  gate there would mean copying a model key into the Dependabot secret scope
+  and spending quota to re-check an already-proven diff. That quota is the same
+  free-tier budget the product itself runs on (ADR-0002, BYOK).
+- A permanently red check on every routine bump teaches people to ignore red.
+  That is how a gauntlet actually dies.
+
+**Every human- and agent-authored PR still gets the full AI review.** The run
+summary prints which gates actually executed, so a skipped gate can never read
+as an enforced one.
+
 ## Gate 3 · CodeQL
 
 CodeQL's `analyze` step was failing at SARIF upload with *"Code scanning is

@@ -91,8 +91,25 @@ jobs:
   static-security:
     uses: ./.github/workflows/_static-security.yml
 
+  # Gate 4 does NOT run on dependency-bot PRs. This is a deliberate scoping
+  # decision, not a weakening — spelled out so nobody has to guess:
+  #
+  #   * A bot PR's diff is a lockfile. The two risks it can carry are a known
+  #     CVE and a forbidden licence, and BOTH already have dedicated,
+  #     deterministic, free gates that do run: `dependency CVEs` and
+  #     `supply-chain / licenses + SBOM`. An LLM reading a version number adds
+  #     nothing they don't already prove.
+  #   * GitHub deliberately withholds Actions secrets from Dependabot, so the
+  #     gate could only ever run here by copying a key into the Dependabot
+  #     secret scope — spending model quota to re-check what is already proven.
+  #   * A permanently red check on every routine bump trains people to ignore
+  #     red. That is how a gauntlet actually dies.
+  #
+  # Every human- and agent-authored PR still gets the full AI review.
   ai-review:
-    if: github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.actor != 'dependabot[bot]'
     uses: ./.github/workflows/_ai-review.yml
     secrets: inherit   # ANTHROPIC_API_KEY if set, else GROQ/MISTRAL/GEMINI
 
@@ -109,11 +126,25 @@ jobs:
     needs: [build, unit, static-security, supply-chain, e2e, perf, ai-review, absorption]
     steps:
       - name: Report what is and isn't enforced
+        env:
+          AI_REVIEW_RESULT: ${{ needs.ai-review.result }}
         run: |
           {
             echo "## Gauntlet coverage"
             echo
-            echo "**Enforced this run:** 1 build · 2 unit · 3 static-security · 4 ai-review · 5 supply-chain · 8 perf · 11 e2e"
+            # Report what ACTUALLY ran. Printing "ai-review enforced" on a run
+            # where it was skipped would make this summary the very thing
+            # CI_STATUS.md exists to prevent: a gate that reads as green
+            # without having run.
+            if [ "$AI_REVIEW_RESULT" = "skipped" ]; then
+              echo "**Enforced this run:** 1 build · 2 unit · 3 static-security · 5 supply-chain · 8 perf · 11 e2e"
+              echo
+              echo "> Gate 4 (ai-review) was **skipped**: dependency-bot PRs change a"
+              echo "> lockfile only, and both risks that carries — known CVEs and"
+              echo "> forbidden licences — are proven by gates 3 and 5, which did run."
+            else
+              echo "**Enforced this run:** 1 build · 2 unit · 3 static-security · 4 ai-review · 5 supply-chain · 8 perf · 11 e2e"
+            fi
             echo
             echo "### NOT enforced — absent, not passing"
             echo "| Gate | Blocked on | Unblocks when |"
