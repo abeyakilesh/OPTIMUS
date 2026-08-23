@@ -42,6 +42,10 @@ jobs:
     outputs:
       app: ${{ steps.f.outputs.app }}
       deps: ${{ steps.f.outputs.deps }}
+      # ci must be forwarded, not just produced by the composite action —
+      # an undeclared job output evaluates to empty, so any `needs.filter.
+      # outputs.ci` condition silently never matches.
+      ci: ${{ steps.f.outputs.ci }}
       docs-only: ${{ steps.f.outputs.docs-only }}
     steps:
       - uses: actions/checkout@v5
@@ -71,7 +75,14 @@ jobs:
 
   supply-chain:
     needs: filter
-    if: needs.filter.outputs.deps == 'true' || github.event_name == 'push'
+    # Also runs when the gate's OWN code changes (`ci`), not just when a
+    # dependency does. Without that, a PR editing scripts/license-gate.mjs or
+    # _supply-chain.yml skips the very gate it rewrites, and the change lands
+    # unproven — which is exactly what happened on PR #8.
+    if: >-
+      needs.filter.outputs.deps == 'true' ||
+      needs.filter.outputs.ci == 'true' ||
+      github.event_name == 'push'
     uses: ./.github/workflows/_supply-chain.yml
 
   # ── gates that ALWAYS run ───────────────────────────────────────────────
