@@ -1,0 +1,190 @@
+/**
+ * K0 — the vocabulary. Every other kernel module speaks these types.
+ *
+ * The shapes follow CLAUDE.md's execution model: a mission is a pull request,
+ * a step is a job, and a step is DONE only when a check passes. Nothing here
+ * has a "confidence" field, on purpose — model confidence is not a check.
+ */
+
+/** Content-addressed artifact id: "sha256:<64 hex>". */
+export type ArtifactId = string;
+
+export type StepStatus =
+  | "pending"
+  | "running"
+  | "passed"
+  | "failed"
+  | "budget-exhausted"
+  | "blocked" // an upstream step failed
+  | "skipped"; // inputs unchanged, memoised
+
+export type MissionStatus = "proposed" | "running" | "green" | "red" | "rolled-back";
+
+/**
+ * A permission a capability may hold. Deliberately coarse for WP-001 —
+ * the point is that a boundary EXISTS and is enforced, not that it is rich.
+ */
+export type Permission =
+  | "net:read"
+  | "net:write"
+  | "fs:read"
+  | "fs:write"
+  | "proc:spawn";
+
+/**
+ * Budgets are not optional. CLAUDE.md: "No step runs without a declared
+ * budget... A loop without a budget is a slot machine."
+ */
+export interface Budget {
+  /** Hard cap on attempts of the step loop. Must be >= 1. */
+  maxAttempts: number;
+  /** Wall-clock ceiling for the whole step, across all attempts, in ms. */
+  maxWallTimeMs: number;
+  /** Cost ceiling in arbitrary units (tokens, currency — caller's choice). */
+  maxCost: number;
+}
+
+/** What a capability declares about itself. Gate 8 of the onboarding pipeline. */
+export interface CapabilityManifest {
+  id: string;
+  version: string;
+  /** Least privilege. The broker refuses anything not listed here. */
+  permissions: Permission[];
+  /** Budgets a step gets by default when it invokes this capability. */
+  defaultBudget: Budget;
+  /** Human-readable, used in evidence. */
+  description: string;
+}
+
+/** One invocation of a capability. The "commit" in the PR analogy. */
+export interface Action {
+  capabilityId: string;
+  input: unknown;
+  /** Which attempt of the step loop produced this action (1-based). */
+  attempt: number;
+}
+
+/** What came back. Either a value or a failure — never both. */
+export interface Observation {
+  ok: boolean;
+  output?: unknown;
+  error?: string;
+  /** Milliseconds the capability itself took. */
+  durationMs: number;
+  /** Cost units consumed by this single action. */
+  cost: number;
+}
+
+/**
+ * The result of a real check. A step is done when this says so.
+ * `passed: false` must carry a reason — a check that fails silently is a
+ * check that lies.
+ */
+export interface CheckResult {
+  checkId: string;
+  passed: boolean;
+  reason: string;
+  /** Anything the check wants preserved in evidence (measurements, diffs). */
+  detail?: Record<string, unknown>;
+}
+
+/** Everything needed to believe the step's outcome. Gate: FR-8 / AC-8. */
+export interface Evidence {
+  stepId: string;
+  capabilityId: string;
+  capabilityVersion: string;
+  attempts: number;
+  /** Exit code convention: 0 pass, non-zero fail. */
+  exitCode: number;
+  durationMs: number;
+  cost: number;
+  artifactIds: ArtifactId[];
+  checks: CheckResult[];
+  /** Hash of the step's resolved inputs — drives memoisation. */
+  inputHash: string;
+}
+
+/** A node in the mission DAG. One tool, one loop, one budget. */
+export interface StepSpec {
+  id: string;
+  capabilityId: string;
+  input: unknown;
+  /** Step ids that must pass before this one may run. */
+  dependsOn: string[];
+  /** Check ids that must all pass for this step to be `passed`. */
+  checks: string[];
+  /** Overrides the capability's default budget. */
+  budget?: Budget;
+  /**
+   * Named exclusive resources this step needs (one browser profile, one
+   * worktree). The scheduler will not run two steps sharing a lock.
+   */
+  locks?: string[];
+  /**
+   * A failed step normally blocks its dependents. Setting this records the
+   * failure in evidence and lets the graph continue — never silently.
+   */
+  continueOnError?: boolean;
+  /** Which agent owns this step. Used for reporting and concurrency limits. */
+  agent?: string;
+}
+
+export interface StepState {
+  spec: StepSpec;
+  status: StepStatus;
+  evidence?: Evidence;
+  startedAt?: number;
+  endedAt?: number;
+}
+
+export interface MissionSpec {
+  id: string;
+  objective: string;
+  steps: StepSpec[];
+  /** Max steps executing at once across the whole mission. */
+  maxParallel?: number;
+}
+
+export interface MissionState {
+  spec: MissionSpec;
+  status: MissionStatus;
+  steps: Record<string, StepState>;
+}
+
+/** A capability the broker can invoke. */
+export interface Capability {
+  manifest: CapabilityManifest;
+  /**
+   * Run the capability. `ctx` carries the permission-checked surfaces; a
+   * capability must reach the outside world through it, never directly.
+   */
+  run(input: unknown, ctx: CapabilityContext): Promise<unknown>;
+}
+
+/**
+ * The only door a capability has to the outside. Every method is
+ * permission-checked against the capability's manifest before it does
+ * anything, so a capability cannot exceed its declared blast radius.
+ */
+export interface CapabilityContext {
+  netRead(url: string): Promise<string>;
+  fsRead(path: string): Promise<string>;
+  fsWrite(path: string, data: string): Promise<void>;
+  /** Persist bytes and get back a content address. */
+  putArtifact(data: string): Promise<ArtifactId>;
+  readArtifact(id: ArtifactId): Promise<string>;
+}
+
+/** A check the verification spine can run. */
+export interface Check {
+  id: string;
+  /**
+   * `output` is whatever the capability returned. Checks must be able to
+   * FAIL — a check that cannot fail is not a check.
+   */
+  run(output: unknown, ctx: CheckContext): Promise<CheckResult>;
+}
+
+export interface CheckContext {
+  readArtifact(id: ArtifactId): Promise<string>;
+}
