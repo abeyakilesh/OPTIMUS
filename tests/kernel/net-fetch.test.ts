@@ -13,12 +13,17 @@ import type { AddressInfo } from "node:net";
 
 import { createContext, PermissionDenied } from "../../kernel/permissions";
 import { MemoryArtifactStore } from "../../kernel/artifacts";
+import type { Isolation } from "../../kernel/sandbox";
 
-function ctx(granted: readonly ("net:read" | "net:write")[] = []) {
+function ctx(
+  granted: readonly ("net:read" | "net:write")[] = [],
+  isolation: Isolation = { allowedHosts: ["127.0.0.1", "localhost"] },
+) {
   return createContext({
     capabilityId: "test.capability",
     granted,
     store: new MemoryArtifactStore(),
+    isolation,
   });
 }
 

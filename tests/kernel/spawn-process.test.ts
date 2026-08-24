@@ -12,12 +12,15 @@ import { describe, it, expect } from "vitest";
 
 import { createContext, PermissionDenied } from "../../kernel/permissions";
 import { MemoryArtifactStore } from "../../kernel/artifacts";
+import type { Isolation } from "../../kernel/sandbox";
+import { tmpdir } from "node:os";
 
-function ctx(granted: readonly ("proc:spawn")[] = []) {
+function ctx(granted: readonly ("proc:spawn")[] = [], isolation: Isolation = { cwd: tmpdir() }) {
   return createContext({
     capabilityId: "test.capability",
     granted,
     store: new MemoryArtifactStore(),
+    isolation,
   });
 }
 

@@ -212,6 +212,9 @@ export class Harness {
       granted: manifest.permissions,
       store: this.deps.store,
       fetcher,
+      // Undeclared isolation reaches createContext as undefined and is treated
+      // as DENY_ALL there — the fail-closed default lives in one place.
+      isolation: manifest.isolation,
     });
 
     const began = this.now();

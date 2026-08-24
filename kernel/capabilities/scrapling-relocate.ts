@@ -40,6 +40,10 @@ export const scraplingRelocate: Capability = {
     id: "scrapling.relocate",
     version: "0.4.9-port",
     permissions: [],
+    // Pure computation over its inputs: no files, no network, no processes.
+    // An empty radius is the honest declaration, not a placeholder — and
+    // because it holds no permissions, the broker's radius check is vacuous.
+    isolation: {},
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 5000, maxCost: 5 },
     description:
       "Finds the element matching a saved fingerprint on a page, surviving " +

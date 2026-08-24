@@ -56,6 +56,20 @@ export const browserNavigate: Capability = {
     id: "browser.navigate",
     version: "0.13.7-service", // pinned browser-use version, see requirements.txt
     permissions: ["proc:spawn", "net:read"],
+    isolation: {
+      // The bridge runs in its own directory, not wherever OPTIMUS happens
+      // to be started from.
+      cwd: dirname(fileURLToPath(import.meta.url)),
+      // Python needs these to locate an interpreter and its site-packages;
+      // everything else in process.env — every provider key, the session
+      // secret — is stripped before the child sees it.
+      env: ["VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME", "PATH"],
+      // Declared, not hidden: the actual HTTP request happens INSIDE the
+      // Python child, which the kernel cannot police from in-process. This
+      // is the honest form of the `net:read` caveat documented above — an
+      // admitted gap the broker can see, rather than a silent one.
+      unconfinedChildEgress: true,
+    },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 45_000, maxCost: 20 },
     description:
       "Navigates a real, headless Chromium-family browser to a URL via " +
