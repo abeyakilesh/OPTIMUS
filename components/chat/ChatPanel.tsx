@@ -3,18 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight } from "@/components/landing/Icons";
 import type { MissionApiResult } from "@/app/api/missions/route";
-import type { CheckResult, MissionState } from "@/kernel/types";
+import type { CheckResult } from "@/kernel/types";
+import { failureFor, loadMission, sendMission, type MissionFailure } from "@/lib/missions/client";
 
 type Message = { role: "user" | "assistant"; content: string };
-type Status = "idle" | "sending" | "unavailable";
+type Status = "idle" | "sending" | "failed";
 type StepEvidence = MissionApiResult["steps"][number];
-
-interface MissionDetailResponse {
-  ok: boolean;
-  reason?: string;
-  content?: string;
-  mission?: MissionState;
-}
 
 const SUGGESTIONS = [
   "What can OPTIMUS actually do right now?",
@@ -26,7 +20,7 @@ const SUGGESTIONS = [
 interface Props {
   /** Mission id selected from the sidebar, or null for a fresh conversation. */
   missionId: string | null;
-  /** Called with the new mission's id right after it's created. */
+  /** Called with the mission's id once one really exists — red ones included. */
   onMissionCreated: (id: string) => void;
 }
 
@@ -34,7 +28,7 @@ export default function ChatPanel({ missionId, onMissionCreated }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<Status>("idle");
-  const [errorReason, setErrorReason] = useState<string | null>(null);
+  const [failure, setFailure] = useState<MissionFailure | null>(null);
   const [lastEvidence, setLastEvidence] = useState<StepEvidence[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -48,28 +42,33 @@ export default function ChatPanel({ missionId, onMissionCreated }: Props) {
     let cancelled = false;
     (async () => {
       setStatus("sending"); // reuse as a generic "loading" state while fetching
-      const res = await fetch(`/api/missions/${missionId}`);
-      const data = (await res.json()) as MissionDetailResponse;
+      const result = await loadMission(missionId);
       if (cancelled) return;
 
-      if (!data.ok || !data.mission) {
-        setStatus("unavailable");
-        setErrorReason(data.reason ?? "could not load this mission");
+      if (!result.ok) {
+        setFailure(result.failure);
+        setStatus("failed");
         return;
       }
 
-      const mission = data.mission;
+      const mission = result.mission;
       const chatStep = mission.steps.chat;
       const inputMessages = (chatStep?.spec.input as { messages?: Message[] } | undefined)?.messages;
       const userText = inputMessages?.at(-1)?.content ?? mission.spec.objective;
       const next: Message[] = [{ role: "user", content: userText }];
-      if (mission.status === "green" && data.content) {
-        next.push({ role: "assistant", content: data.content });
+
+      if (mission.status === "green" && result.content) {
+        next.push({ role: "assistant", content: result.content });
         setStatus("idle");
       } else {
-        setStatus("unavailable");
-        setErrorReason(chatStep?.evidence?.checks[0]?.reason ?? "mission did not complete");
+        // This one really IS the model layer: the mission ran and came back
+        // red, and its own check says why.
+        setFailure(
+          failureFor("model-layer", chatStep?.evidence?.checks[0]?.reason ?? "mission did not complete"),
+        );
+        setStatus("failed");
       }
+
       setMessages(next);
       setLastEvidence(
         Object.values(mission.steps).map((s) => ({
@@ -87,6 +86,35 @@ export default function ChatPanel({ missionId, onMissionCreated }: Props) {
     };
   }, [missionId]);
 
+  /**
+   * The network leg. Split from send() so a failed attempt can be retried
+   * against the SAME conversation without re-appending the user's message —
+   * a failure used to leave the typed text nowhere at all.
+   */
+  async function runMission(conversation: Message[]) {
+    setStatus("sending");
+    setFailure(null);
+    setLastEvidence(null);
+
+    const result = await sendMission(conversation);
+
+    if (!result.ok) {
+      // A red mission is still a REAL mission. If the server got far enough
+      // to create one, it belongs in the sidebar, honestly marked — not
+      // silently discarded because it failed.
+      if (result.failure.missionId) onMissionCreated(result.failure.missionId);
+      if (result.failure.steps) setLastEvidence(result.failure.steps);
+      setFailure(result.failure);
+      setStatus("failed");
+      return;
+    }
+
+    onMissionCreated(result.missionId);
+    setLastEvidence(result.steps);
+    setMessages([...conversation, { role: "assistant", content: result.content }]);
+    setStatus("idle");
+  }
+
   async function send(overrideText?: string) {
     const trimmed = (overrideText ?? input).trim();
     if (!trimmed || status === "sending") return;
@@ -94,36 +122,11 @@ export default function ChatPanel({ missionId, onMissionCreated }: Props) {
     const next = [...messages, { role: "user" as const, content: trimmed }];
     setMessages(next);
     setInput("");
-    setStatus("sending");
-    setErrorReason(null);
-    setLastEvidence(null);
-
-    try {
-      const res = await fetch("/api/missions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next }),
-      });
-      const data = (await res.json()) as MissionApiResult;
-
-      onMissionCreated(data.missionId);
-      setLastEvidence(data.steps);
-
-      if (!res.ok || !data.ok) {
-        setStatus("unavailable");
-        setErrorReason(data.reason ?? `request failed (${res.status})`);
-        return;
-      }
-
-      setMessages((m) => [...m, { role: "assistant", content: data.content ?? "" }]);
-      setStatus("idle");
-    } catch (error) {
-      setStatus("unavailable");
-      setErrorReason(error instanceof Error ? error.message : "network error");
-    }
+    await runMission(next);
   }
 
   const isEmpty = messages.length === 0 && status === "idle";
+  const canRetry = failure?.kind !== "signed-out" && messages.at(-1)?.role === "user";
 
   return (
     <div className="mx-auto flex h-full w-full max-w-[720px] flex-col px-6">
@@ -188,11 +191,32 @@ export default function ChatPanel({ missionId, onMissionCreated }: Props) {
             </div>
           )}
 
-          {status === "unavailable" && (
-            <div className="rounded-lg border border-line-2 bg-mist px-4 py-3 text-[13px] text-muted">
-              <span className="font-data font-medium text-ink">model layer unavailable</span>
+          {status === "failed" && failure && (
+            <div
+              data-failure-kind={failure.kind}
+              className="rounded-lg border border-line-2 bg-mist px-4 py-3 text-[13px] text-muted"
+            >
+              <span className="font-data font-medium text-ink">{failure.label}</span>
               {" — "}
-              {errorReason}
+              {failure.detail}
+              {failure.kind === "signed-out" ? (
+                <a
+                  href="/login?next=%2Fchat"
+                  className="ml-2 font-medium text-cyan-dark underline underline-offset-2"
+                >
+                  Sign in again
+                </a>
+              ) : (
+                canRetry && (
+                  <button
+                    onClick={() => void runMission(messages)}
+                    className="ml-2 font-medium text-cyan-dark underline underline-offset-2"
+                  >
+                    Retry
+                  </button>
+                )
+              )}
+              {lastEvidence && <EvidenceCaption steps={lastEvidence} />}
             </div>
           )}
         </div>

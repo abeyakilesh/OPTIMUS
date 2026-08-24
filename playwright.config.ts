@@ -24,6 +24,14 @@ export default defineConfig({
       // Isolated from real local dev data — the mission/artifact store this
       // suite writes real files to, never the developer's actual history.
       OPTIMUS_DATA_DIR: ".optimus-data-e2e",
+      // Port 9 is the discard port: nothing ever listens there, so the
+      // "model layer unreachable" test fails the SAME way on a developer
+      // laptop that happens to have OmniRoute running as it does in CI,
+      // which has none. It used to pass only by accident of environment —
+      // caught when this suite was run on a machine with a live OmniRoute.
+      // Nothing here exercises a genuinely live model; that path is proven
+      // by hand against a real instance, and honestly remains an e2e gap.
+      OMNIROUTE_BASE_URL: "http://127.0.0.1:9",
     },
   },
 });
