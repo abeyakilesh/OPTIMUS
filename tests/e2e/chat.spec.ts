@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { signIn } from "./helpers/auth";
 
 /**
  * The first real vertical slice: browser → /api/chat → kernel → llm.chat
@@ -7,9 +8,17 @@ import { expect, test } from "@playwright/test";
  * OmniRoute's own real-server unit tests — so the default-environment case
  * here IS the unavailable path, tested for real, not mocked. The success
  * render path is mocked separately since a real reply isn't available in CI.
+ *
+ * /chat is gated by proxy.ts (box #5's auth) — the boundary itself has its
+ * own coverage in auth.spec.ts. These tests sign in first via the real
+ * login route so they're exercising the chat feature, not re-proving auth.
  */
 
 test.describe("chat", () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+  });
+
   test("loads with an input and a disabled send button until there's text", async ({ page }) => {
     await page.goto("/chat");
 

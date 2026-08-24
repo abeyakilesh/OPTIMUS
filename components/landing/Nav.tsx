@@ -50,12 +50,12 @@ export default function Nav() {
             <ChevronDown className="h-3 w-3 text-faint" />
           </button>
 
-          <a
-            href="#signin"
+          <Link
+            href="/login"
             className="hidden rounded-lg border border-line-2 px-4 py-2 text-[14px] font-medium text-ink transition hover:border-ink/30 hover:bg-mist sm:block"
           >
             Sign in
-          </a>
+          </Link>
 
           <Link
             href="/chat"
