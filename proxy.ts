@@ -5,7 +5,7 @@
  * the Node.js runtime here, so this can use the same node:crypto-based
  * session verification as the login route, not a separate Edge-only path.
  *
- * Scope is deliberately narrow: only /chat and /api/chat are gated. The
+ * Scope is deliberately narrow: only /chat and /api/missions are gated. The
  * marketing site stays public — that's the whole point of a funnel.
  */
 
@@ -34,5 +34,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/chat", "/chat/:path*", "/api/chat"],
+  matcher: ["/chat", "/chat/:path*", "/api/missions", "/api/missions/:path*"],
 };

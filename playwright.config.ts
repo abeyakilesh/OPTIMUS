@@ -21,6 +21,9 @@ export default defineConfig({
     env: {
       OPTIMUS_PASSWORD: "e2e-test-password",
       OPTIMUS_SESSION_SECRET: "e2e-test-session-secret-do-not-reuse",
+      // Isolated from real local dev data — the mission/artifact store this
+      // suite writes real files to, never the developer's actual history.
+      OPTIMUS_DATA_DIR: ".optimus-data-e2e",
     },
   },
 });

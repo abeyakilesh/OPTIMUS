@@ -16,8 +16,8 @@ test.describe("auth", () => {
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   });
 
-  test("an unauthenticated request to /api/chat is refused, not silently allowed", async ({ request }) => {
-    const res = await request.post("/api/chat", { data: { messages: [{ role: "user", content: "hi" }] } });
+  test("an unauthenticated request to /api/missions is refused, not silently allowed", async ({ request }) => {
+    const res = await request.post("/api/missions", { data: { messages: [{ role: "user", content: "hi" }] } });
     expect(res.status()).toBe(401);
     expect((await res.json()).ok).toBe(false);
   });
@@ -57,7 +57,7 @@ test.describe("auth", () => {
   test("a signed-in session survives across requests, not just the initial page load", async ({ page }) => {
     await signIn(page);
     const status = await page.evaluate(async () => {
-      const res = await fetch("/api/chat", {
+      const res = await fetch("/api/missions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
