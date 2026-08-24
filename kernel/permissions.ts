@@ -15,6 +15,8 @@ import { spawn } from "node:child_process";
 import type {
   ArtifactId,
   CapabilityContext,
+  NetFetchRequest,
+  NetFetchResult,
   Permission,
   ProcessResult,
   ProcessSpec,
@@ -86,6 +88,12 @@ export function createContext(options: BoundaryOptions): CapabilityContext {
       require("proc:spawn");
       return runProcess(spec);
     },
+
+    async netFetch(request: NetFetchRequest): Promise<NetFetchResult> {
+      const method = request.method ?? "GET";
+      require(method === "GET" || method === "HEAD" ? "net:read" : "net:write");
+      return runFetch(request, method);
+    },
   };
 }
 
@@ -137,4 +145,36 @@ function runProcess(spec: ProcessSpec): Promise<ProcessResult> {
     if (spec.input !== undefined) child.stdin.write(spec.input);
     child.stdin.end();
   });
+}
+
+/**
+ * Calls `request.url` and aborts if `timeoutMs` elapses, mirroring
+ * runProcess's independent hard-kill reasoning: this is enforced HERE, not
+ * left to the caller to notice a step's budget ran out.
+ */
+async function runFetch(request: NetFetchRequest, method: string): Promise<NetFetchResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), request.timeoutMs);
+
+  try {
+    const response = await fetch(request.url, {
+      method,
+      headers: request.headers,
+      body: request.body,
+      signal: controller.signal,
+    });
+    const body = await response.text();
+    const headers: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+    return { status: response.status, headers, body, timedOut: false };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { status: 0, headers: {}, body: "", timedOut: true };
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
