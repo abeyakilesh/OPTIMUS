@@ -45,9 +45,9 @@ next-env.d.ts
 .rules-staged/
 !.env.example
 
-# Only the root README (the landing-page doc, deliberately untracked — see
-# git history). A bare `README.md` here would match every README.md in the
-# repo, silently swallowing subdirectory docs like
-# kernel/capabilities/*/README.md — confirmed this was happening before
-# fixing it (`git check-ignore -v` pointed at this exact line).
-/README.md
+# All README.md files, everywhere in the repo — none of them ship. Kept on
+# disk (source of documentation truth for whoever's absorbing a repo), just
+# not committed. Explicit user call: don't publish internal build docs in a
+# public repo. Matches every depth, so no per-directory drift is possible.
+README.md
+**/README.md
