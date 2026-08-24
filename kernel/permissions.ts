@@ -11,7 +11,14 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { ArtifactId, CapabilityContext, Permission } from "./types";
+import { spawn } from "node:child_process";
+import type {
+  ArtifactId,
+  CapabilityContext,
+  Permission,
+  ProcessResult,
+  ProcessSpec,
+} from "./types";
 import type { ArtifactStore } from "./artifacts";
 
 export class PermissionDenied extends Error {
@@ -74,5 +81,60 @@ export function createContext(options: BoundaryOptions): CapabilityContext {
     async readArtifact(id: ArtifactId): Promise<string> {
       return store.get(id);
     },
+
+    async spawnProcess(spec: ProcessSpec): Promise<ProcessResult> {
+      require("proc:spawn");
+      return runProcess(spec);
+    },
   };
+}
+
+/**
+ * Runs `spec.command` to completion, killing it if `timeoutMs` elapses.
+ * Deliberately independent of the harness's own budget clock: the harness
+ * only checks wall time BETWEEN attempts, so without a hard kill here a
+ * single hung process (a browser that never responds, a stuck subprocess)
+ * would block past the step's budget instead of failing honestly within it.
+ */
+function runProcess(spec: ProcessSpec): Promise<ProcessResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(spec.command, spec.args ?? [], {
+      env: { ...process.env, ...spec.env },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, spec.timeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+
+    child.on("close", (exitCode) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ exitCode, stdout, stderr, timedOut });
+    });
+
+    if (spec.input !== undefined) child.stdin.write(spec.input);
+    child.stdin.end();
+  });
 }

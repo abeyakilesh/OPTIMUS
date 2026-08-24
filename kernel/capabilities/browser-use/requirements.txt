@@ -1,0 +1,4 @@
+# Gate 6 — pinned provenance. Matches the local browser-use-main checkout
+# exactly (pyproject.toml `version = "0.13.7"`), so the fidelity claims in
+# this directory are about a specific, reproducible upstream version.
+browser-use==0.13.7
