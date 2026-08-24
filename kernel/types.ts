@@ -185,6 +185,20 @@ export interface CapabilityContext {
    * process is killed and this rejects; it never leaves an orphan running.
    */
   spawnProcess(spec: ProcessSpec): Promise<ProcessResult>;
+
+  /**
+   * Calls an already-running HTTP service (local or remote) and returns its
+   * raw response — the primitive a SERVICE-fate capability needs when the
+   * real engine is a long-lived server it talks to over and over, rather
+   * than a one-shot process run to completion (that's `spawnProcess`).
+   *
+   * Permission is gated by method, same least-privilege split as fsRead vs
+   * fsWrite: GET/HEAD need only `net:read`; anything that can carry a body
+   * (POST/PUT/PATCH/DELETE) needs `net:write`. `timeoutMs` is enforced HERE
+   * via AbortController, independently of the step's wall-time budget — same
+   * reasoning as spawnProcess's own hard kill.
+   */
+  netFetch(request: NetFetchRequest): Promise<NetFetchResult>;
 }
 
 export interface ProcessSpec {
@@ -203,6 +217,26 @@ export interface ProcessResult {
   stdout: string;
   stderr: string;
   /** True when spawnProcess killed the process for exceeding timeoutMs. */
+  timedOut: boolean;
+}
+
+export interface NetFetchRequest {
+  url: string;
+  /** Defaults to "GET". */
+  method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
+  headers?: Record<string, string>;
+  /** Raw request body. Only meaningful for methods that permit one. */
+  body?: string;
+  /** Hard abort ceiling for this one call — see netFetch's docstring. */
+  timeoutMs: number;
+}
+
+export interface NetFetchResult {
+  /** 0 when timedOut is true — no real status was ever received. */
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+  /** True when netFetch aborted the request for exceeding timeoutMs. */
   timedOut: boolean;
 }
 
