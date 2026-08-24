@@ -1,0 +1,56 @@
+[
+  {
+    "name": "identical-strings",
+    "a": "hello world",
+    "b": "hello world",
+    "expected": 1.0
+  },
+  {
+    "name": "completely-different",
+    "a": "abcdef",
+    "b": "ghijkl",
+    "expected": 0.0
+  },
+  {
+    "name": "empty-both",
+    "a": "",
+    "b": "",
+    "expected": 1.0
+  },
+  {
+    "name": "empty-one-side",
+    "a": "abc",
+    "b": "",
+    "expected": 0.0
+  },
+  {
+    "name": "partial-overlap",
+    "a": "The quick brown fox",
+    "b": "The slow brown fox",
+    "expected": 0.7567567567567568
+  },
+  {
+    "name": "single-char",
+    "a": "a",
+    "b": "a",
+    "expected": 1.0
+  },
+  {
+    "name": "unicode-emoji",
+    "a": "caf\u00e9 \ud83c\udf89 test",
+    "b": "cafe \ud83c\udf89 test",
+    "expected": 0.9090909090909091
+  },
+  {
+    "name": "autojunk-trigger",
+    "a": "pzqzrzs",
+    "b": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    "expected": 0.0
+  },
+  {
+    "name": "autojunk-not-triggered-under-200",
+    "a": "pzqzrzs",
+    "b": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    "expected": 0.10526315789473684
+  }
+]
