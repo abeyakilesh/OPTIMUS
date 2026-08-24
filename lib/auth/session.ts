@@ -8,7 +8,7 @@
  * recompute.
  */
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, scryptSync, timingSafeEqual } from "node:crypto";
 
 export const SESSION_COOKIE = "optimus_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -41,14 +41,19 @@ export function verifySessionToken(token: string | undefined | null, secret: str
 }
 
 /**
- * Constant-time password check that doesn't require the submitted and
- * real password to be the same length up front (timingSafeEqual throws
- * on a length mismatch, which would otherwise leak length via the
- * exception path). Hashing both to a fixed-length digest first sidesteps
- * that.
+ * Constant-time password check, via scrypt rather than a fast hash.
+ * CodeQL correctly flagged an earlier HMAC-SHA256 version of this function
+ * as "insufficient computational effort" for password hashing — a fast
+ * hash makes offline brute-forcing cheap. There's no hash stored at rest
+ * here (OPTIMUS_PASSWORD is compared directly each request, not persisted
+ * as a hash), but the fix is the same either way: use a KDF meant for
+ * passwords. scrypt also sidesteps timingSafeEqual's length-mismatch
+ * exception the same way the digest approach did, since its output is
+ * always the requested length regardless of input length.
  */
 export function passwordMatches(submitted: string, expected: string): boolean {
-  const a = createHmac("sha256", "optimus-password-compare").update(submitted).digest();
-  const b = createHmac("sha256", "optimus-password-compare").update(expected).digest();
+  const salt = "optimus-password-compare";
+  const a = scryptSync(submitted, salt, 32);
+  const b = scryptSync(expected, salt, 32);
   return timingSafeEqual(a, b);
 }
