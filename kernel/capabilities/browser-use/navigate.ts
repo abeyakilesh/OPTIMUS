@@ -68,6 +68,19 @@ export const browserNavigate: Capability = {
       // Python child, which the kernel cannot police from in-process. This
       // is the honest form of the `net:read` caveat documented above — an
       // admitted gap the broker can see, rather than a silent one.
+      //
+      // ⛔ CEILING, NOT A TODO. This caps sandbox at 3/5 for this capability
+      // and it is NOT closable by editing this file. Once a child process
+      // exists, confining its sockets needs a boundary OUTSIDE the process:
+      // an OS network namespace, or a microVM.
+      //
+      //   Blocked on: codesandbox-sdk (Wave 1, not yet absorbed) — or a
+      //   local equivalent, since codesandbox-client is GPL and now a
+      //   read-only FIXTURE (CLAUDE.md, RE-FATED table).
+      //
+      // Per CLAUDE.md's WIP rule, "blocked on X" is a legitimate stopping
+      // point and "not tested" never is. Do not read 3/5 as unfinished work
+      // and try to close it in-process; it cannot be closed in-process.
       unconfinedChildEgress: true,
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 45_000, maxCost: 20 },

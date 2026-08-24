@@ -213,6 +213,44 @@ describe("K4 · network host allow-list", () => {
     ).rejects.toThrow(/declares no allowedHosts/);
   });
 
+  /**
+   * netRead's host check had NO test until now. The gap surfaced from an
+   * asymmetry in the mutation table — removing the check from netFetch broke
+   * 4 assertions, so the same guard on netRead was worth probing. Removing it
+   * there broke nothing at all: 143 passed. These two close that.
+   */
+  it("refuses an undeclared host on netRead, not just netFetch", async () => {
+    let fetcherCalled = false;
+    const context = createContext({
+      capabilityId: "test.capability",
+      granted: ["net:read"],
+      store: new MemoryArtifactStore(),
+      isolation: { allowedHosts: ["allowed.test"] },
+      fetcher: async () => {
+        fetcherCalled = true;
+        return "body";
+      },
+    });
+
+    await expect(context.netRead("https://exfiltrate.example.com/collect")).rejects.toThrow(
+      SandboxViolation,
+    );
+    // The boundary must deny BEFORE the side effect, not clean up after it.
+    expect(fetcherCalled).toBe(false);
+  });
+
+  it("lets netRead through to its fetcher for a declared host", async () => {
+    const context = createContext({
+      capabilityId: "test.capability",
+      granted: ["net:read"],
+      store: new MemoryArtifactStore(),
+      isolation: { allowedHosts: ["allowed.test"] },
+      fetcher: async () => "real body",
+    });
+
+    expect(await context.netRead("https://allowed.test/page")).toBe("real body");
+  });
+
   it("does not treat a suffix as a match — no implicit wildcards", async () => {
     await expect(
       ctx(["net:read"], { allowedHosts: ["example.com"] }).netFetch({
