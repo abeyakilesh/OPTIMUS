@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/landing/Icons";
 import ChatPanel from "@/components/chat/ChatPanel";
+import SignOutButton from "@/components/auth/SignOutButton";
 
 export const metadata = {
   title: "Chat — OPTIMUS",
@@ -13,6 +14,9 @@ export default function ChatPage() {
         <Link href="/" aria-label="OPTIMUS home">
           <Logo />
         </Link>
+        <div className="ml-auto">
+          <SignOutButton />
+        </div>
       </header>
       <main>
         <ChatPanel />

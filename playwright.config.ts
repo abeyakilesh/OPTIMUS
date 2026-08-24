@@ -15,5 +15,12 @@ export default defineConfig({
     url: "http://127.0.0.1:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
+    // Test-only credentials so the /chat auth gate (proxy.ts) has something
+    // real to check against in CI. Not a production secret — never reused
+    // outside this local/CI e2e run.
+    env: {
+      OPTIMUS_PASSWORD: "e2e-test-password",
+      OPTIMUS_SESSION_SECRET: "e2e-test-session-secret-do-not-reuse",
+    },
   },
 });

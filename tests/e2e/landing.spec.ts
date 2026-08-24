@@ -62,22 +62,28 @@ test.describe("landing page", () => {
     ).toBeVisible();
   });
 
-  test("the primary CTAs lead to the real chat page, not a dead anchor", async ({ page }) => {
+  test("the primary CTAs lead to the real chat page (via login, when signed out), not a dead anchor", async ({
+    page,
+  }) => {
     // These used to be #start / #signup — scroll anchors going nowhere real.
-    // The only thing on this site that actually works right now is /chat;
-    // regressing these back to an anchor is exactly the kind of "button that
-    // fakes it" Directive #4 rules out.
+    // /chat is now gated (box #5), so a signed-out visitor correctly lands
+    // on /login?next=/chat rather than /chat directly — that redirect IS
+    // the real destination, not a broken link. Regressing these back to an
+    // anchor is exactly the kind of "button that fakes it" Directive #4
+    // rules out.
+    const realDestination = /\/(chat|login\?next=%2Fchat)$/;
+
     await page.goto("/");
     await page.getByRole("link", { name: "Get started free" }).click();
-    await expect(page).toHaveURL(/\/chat$/);
+    await expect(page).toHaveURL(realDestination);
 
     await page.goto("/");
     await page.getByRole("link", { name: "Start for free" }).click();
-    await expect(page).toHaveURL(/\/chat$/);
+    await expect(page).toHaveURL(realDestination);
 
     await page.goto("/");
     await page.getByRole("link", { name: "Start free", exact: true }).click();
-    await expect(page).toHaveURL(/\/chat$/);
+    await expect(page).toHaveURL(realDestination);
   });
 
   test("has no console errors", async ({ page }) => {
