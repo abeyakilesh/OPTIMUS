@@ -1,21 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
-import type { ChatApiResponse } from "@/app/api/chat/route";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight } from "@/components/landing/Icons";
+import type { MissionApiResult } from "@/app/api/missions/route";
+import type { CheckResult, MissionState } from "@/kernel/types";
 
 type Message = { role: "user" | "assistant"; content: string };
 type Status = "idle" | "sending" | "unavailable";
+type StepEvidence = MissionApiResult["steps"][number];
 
-/**
- * Deliberately NOT "Build a restaurant website" / "Automate a workflow" —
- * those are what the landing page's hero mockup shows, but that's a mockup
- * of the mission bridge (box #7, not built). This page today can only have
- * a real conversation with a real model — no tool execution behind it yet.
- * Suggesting a mission this can't run would be exactly the kind of button
- * that fakes it Directive #4 rules out; these are scoped to what a chat
- * completion actually does.
- */
+interface MissionDetailResponse {
+  ok: boolean;
+  reason?: string;
+  content?: string;
+  mission?: MissionState;
+}
+
 const SUGGESTIONS = [
   "What can OPTIMUS actually do right now?",
   "What's the difference between a chat reply and a mission?",
@@ -23,12 +23,69 @@ const SUGGESTIONS = [
   "Write a two-line haiku about verification.",
 ];
 
-export default function ChatPanel() {
+interface Props {
+  /** Mission id selected from the sidebar, or null for a fresh conversation. */
+  missionId: string | null;
+  /** Called with the new mission's id right after it's created. */
+  onMissionCreated: (id: string) => void;
+}
+
+export default function ChatPanel({ missionId, onMissionCreated }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorReason, setErrorReason] = useState<string | null>(null);
+  const [lastEvidence, setLastEvidence] = useState<StepEvidence[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Loading a past mission from the sidebar replaces the whole view with
+  // its real, persisted transcript — not a re-run. A fresh missionId=null
+  // instance (see ChatShell's `key`) needs no reset here; it already starts
+  // empty.
+  useEffect(() => {
+    if (!missionId) return;
+
+    let cancelled = false;
+    (async () => {
+      setStatus("sending"); // reuse as a generic "loading" state while fetching
+      const res = await fetch(`/api/missions/${missionId}`);
+      const data = (await res.json()) as MissionDetailResponse;
+      if (cancelled) return;
+
+      if (!data.ok || !data.mission) {
+        setStatus("unavailable");
+        setErrorReason(data.reason ?? "could not load this mission");
+        return;
+      }
+
+      const mission = data.mission;
+      const chatStep = mission.steps.chat;
+      const inputMessages = (chatStep?.spec.input as { messages?: Message[] } | undefined)?.messages;
+      const userText = inputMessages?.at(-1)?.content ?? mission.spec.objective;
+      const next: Message[] = [{ role: "user", content: userText }];
+      if (mission.status === "green" && data.content) {
+        next.push({ role: "assistant", content: data.content });
+        setStatus("idle");
+      } else {
+        setStatus("unavailable");
+        setErrorReason(chatStep?.evidence?.checks[0]?.reason ?? "mission did not complete");
+      }
+      setMessages(next);
+      setLastEvidence(
+        Object.values(mission.steps).map((s) => ({
+          id: s.spec.id,
+          capabilityId: s.spec.capabilityId,
+          status: s.evidence ? "finished" : "did-not-run",
+          durationMs: s.evidence?.durationMs,
+          checks: (s.evidence?.checks ?? []) as CheckResult[],
+        })),
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [missionId]);
 
   async function send(overrideText?: string) {
     const trimmed = (overrideText ?? input).trim();
@@ -39,14 +96,18 @@ export default function ChatPanel() {
     setInput("");
     setStatus("sending");
     setErrorReason(null);
+    setLastEvidence(null);
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch("/api/missions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next }),
       });
-      const data = (await res.json()) as ChatApiResponse;
+      const data = (await res.json()) as MissionApiResult;
+
+      onMissionCreated(data.missionId);
+      setLastEvidence(data.steps);
 
       if (!res.ok || !data.ok) {
         setStatus("unavailable");
@@ -65,7 +126,7 @@ export default function ChatPanel() {
   const isEmpty = messages.length === 0 && status === "idle";
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-4rem)] max-w-[720px] flex-col px-6">
+    <div className="mx-auto flex h-full w-full max-w-[720px] flex-col px-6">
       {isEmpty ? (
         <div className="flex flex-1 flex-col items-center justify-center pb-20">
           <div className="w-full max-w-[520px]">
@@ -111,6 +172,9 @@ export default function ChatPanel() {
               >
                 {m.content}
               </span>
+              {m.role === "assistant" && lastEvidence && i === messages.length - 1 && (
+                <EvidenceCaption steps={lastEvidence} />
+              )}
             </div>
           ))}
 
@@ -155,5 +219,28 @@ export default function ChatPanel() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The verification receipt, not a decorative caption — real check ids and
+ * pass/fail straight from the mission's actual Evidence. This is box #8's
+ * spirit (see real proof, not a black box) without inventing a fake
+ * multi-step animation for a mission that only has one step today.
+ */
+function EvidenceCaption({ steps }: { steps: StepEvidence[] }) {
+  return (
+    <p className="mt-1 text-[10.5px] text-faint">
+      {steps.map((s) => (
+        <span key={s.id} className="mr-2">
+          {s.checks.map((c) => (
+            <span key={c.checkId} className={c.passed ? "text-pass" : "text-ink"}>
+              {c.passed ? "✓" : "✕"} {c.checkId}
+            </span>
+          ))}
+          {s.durationMs !== undefined && <span className="ml-1">· {s.durationMs}ms</span>}
+        </span>
+      ))}
+    </p>
   );
 }

@@ -1,0 +1,157 @@
+/**
+ * Box #7/#8/#9's real backend: a chat message becomes a real MissionSpec,
+ * run through the real Scheduler (not a bare harness.runStep call, so this
+ * is genuinely using the mission machinery WP-001 built, even though
+ * there's only one step in it today), persisted so the sidebar has
+ * something real to list.
+ *
+ * Still the smallest honest slice: one message in, one llm.chat step out.
+ * The graph shape is real and ready for more steps; there just aren't more
+ * capabilities wired into a planner yet to add them.
+ */
+
+import { randomUUID } from "node:crypto";
+import { join } from "node:path";
+import { NextResponse, type NextRequest } from "next/server";
+import { Broker } from "@/kernel/broker";
+import { Harness } from "@/kernel/harness";
+import { Scheduler } from "@/kernel/scheduler";
+import { DiskArtifactStore } from "@/kernel/artifacts";
+import { DiskMissionStore, type MissionSummary } from "@/kernel/missionStore";
+import type { Evidence, MissionSpec } from "@/kernel/types";
+import { llmChat, llmChatSucceeded, type LlmChatMessage } from "@/kernel/capabilities/omniroute/chat";
+import { DATA_DIR } from "@/lib/data-dir";
+import { resolveChatContent } from "@/lib/missions/resolveChatContent";
+
+export const dynamic = "force-dynamic";
+
+const OMNIROUTE_BASE_URL = process.env.OMNIROUTE_BASE_URL ?? "http://127.0.0.1:20128";
+const OMNIROUTE_MODEL = process.env.OMNIROUTE_DEFAULT_MODEL ?? "ollama/llama3.2:latest";
+
+function missionStore() {
+  return new DiskMissionStore(join(DATA_DIR, "missions"));
+}
+
+/**
+ * Real, persistent storage — not the in-memory store the kernel's own tests
+ * use. A mission reopened later from the sidebar needs the actual reply
+ * text to still exist, not just its evidence.
+ */
+function artifactStore() {
+  return new DiskArtifactStore(join(DATA_DIR, "artifacts"));
+}
+
+export interface MissionStepResult {
+  id: string;
+  capabilityId: string;
+  status: string;
+  durationMs?: number;
+  checks: Array<{ checkId: string; passed: boolean; reason: string }>;
+}
+
+export interface MissionApiResult {
+  ok: boolean;
+  missionId: string;
+  status: "green" | "red";
+  content?: string;
+  reason?: string;
+  steps: MissionStepResult[];
+}
+
+function isValidMessages(value: unknown): value is LlmChatMessage[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (m) =>
+        m &&
+        typeof m === "object" &&
+        typeof (m as { role?: unknown }).role === "string" &&
+        typeof (m as { content?: unknown }).content === "string",
+    )
+  );
+}
+
+function summarizeSteps(evidenceByStep: Record<string, Evidence | undefined>, spec: MissionSpec): MissionStepResult[] {
+  return spec.steps.map((step) => {
+    const evidence = evidenceByStep[step.id];
+    return {
+      id: step.id,
+      capabilityId: step.capabilityId,
+      status: evidence ? "finished" : "did-not-run",
+      durationMs: evidence?.durationMs,
+      checks: (evidence?.checks ?? []).map((c) => ({
+        checkId: c.checkId,
+        passed: c.passed,
+        reason: c.reason,
+      })),
+    };
+  });
+}
+
+export async function POST(request: NextRequest) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ ok: false, reason: "invalid JSON body" }, { status: 400 });
+  }
+
+  const messages = (body as { messages?: unknown })?.messages;
+  if (!isValidMessages(messages)) {
+    return NextResponse.json(
+      { ok: false, reason: "requires { messages: { role, content }[] }" },
+      { status: 400 },
+    );
+  }
+
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+  const objective = (lastUserMessage?.content ?? "chat").slice(0, 80);
+
+  const spec: MissionSpec = {
+    id: randomUUID(),
+    objective,
+    steps: [
+      {
+        id: "chat",
+        capabilityId: "llm.chat",
+        input: { baseUrl: OMNIROUTE_BASE_URL, model: OMNIROUTE_MODEL, messages },
+        dependsOn: [],
+        checks: ["llm.chatSucceeded"],
+        agent: "chat",
+      },
+    ],
+  };
+
+  const broker = new Broker();
+  broker.register(llmChat);
+  broker.registerCheck(llmChatSucceeded);
+  const store = artifactStore();
+  const harness = new Harness({ broker, store });
+  const scheduler = new Scheduler({ harness });
+
+  const result = await scheduler.run(spec);
+  await missionStore().save(result.log);
+
+  const evidenceByStep: Record<string, Evidence | undefined> = {};
+  for (const [id, step] of Object.entries(result.state.steps)) evidenceByStep[id] = step.evidence;
+
+  const chatEvidence = evidenceByStep.chat;
+  const content = result.green ? await resolveChatContent(chatEvidence, store) : undefined;
+
+  const response: MissionApiResult = {
+    ok: result.green,
+    missionId: spec.id,
+    status: result.green ? "green" : "red",
+    content,
+    reason: result.green ? undefined : (chatEvidence?.checks[0]?.reason ?? "mission did not complete"),
+    steps: summarizeSteps(evidenceByStep, spec),
+  };
+
+  return NextResponse.json(response, { status: result.green ? 200 : 503 });
+}
+
+export async function GET() {
+  const list: MissionSummary[] = await missionStore().list();
+  return NextResponse.json({ ok: true, missions: list });
+}

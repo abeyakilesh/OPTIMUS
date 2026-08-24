@@ -39,6 +39,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local mission/artifact data — real user data from running OPTIMUS locally,
+# never something to ship in the repo. Suffixed variant is the e2e suite's
+# own isolated copy (playwright.config.ts), never the real one.
+/.optimus-data*
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

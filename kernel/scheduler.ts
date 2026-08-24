@@ -29,6 +29,12 @@ export interface SchedulerDeps {
    * step entirely — the `paths-filter` analogue.
    */
   memo?: Map<string, string>;
+  /**
+   * Fired for every event as it's emitted, not just at the end — lets a
+   * caller persist or stream real progress (a live execution view) instead
+   * of only seeing the final EventLog once the whole mission is done.
+   */
+  onEvent?: (event: KernelEvent) => void;
 }
 
 export interface MissionResult {
@@ -87,7 +93,10 @@ export class Scheduler {
     validateGraph(spec);
 
     const log = new EventLog();
-    const emit = (event: KernelEvent): void => log.append(event);
+    const emit = (event: KernelEvent): void => {
+      log.append(event);
+      this.deps.onEvent?.(event);
+    };
 
     emit({ type: "mission.proposed", at: this.now(), spec });
     emit({ type: "mission.started", at: this.now(), missionId: spec.id });
