@@ -1,0 +1,154 @@
+{
+  "cases": [
+    {
+      "candidateHtml": "<div class=\"price\" id=\"p1\">$899</div>",
+      "candidateIndex": 0,
+      "expectedScore": 100.0,
+      "name": "identical",
+      "originalFingerprint": {
+        "attributes": {
+          "class": "price",
+          "id": "p1"
+        },
+        "parent_attribs": {},
+        "parent_name": "body",
+        "parent_text": null,
+        "path": [
+          "html",
+          "body",
+          "div"
+        ],
+        "tag": "div",
+        "text": "$899"
+      },
+      "originalHtml": "<div class=\"price\" id=\"p1\">$899</div>",
+      "originalIndex": 0
+    },
+    {
+      "candidateHtml": "<html><body><section id=\"product-v2\"><p class=\"new-price-label\" id=\"pr-9981\">$899</p></section></body></html>",
+      "candidateIndex": 0,
+      "expectedScore": 66.5,
+      "name": "site-redesign-price-tag",
+      "originalFingerprint": {
+        "attributes": {
+          "id": "product"
+        },
+        "children": [
+          "span"
+        ],
+        "parent_attribs": {},
+        "parent_name": "body",
+        "parent_text": null,
+        "path": [
+          "html",
+          "body",
+          "div"
+        ],
+        "tag": "div",
+        "text": null
+      },
+      "originalHtml": "<html><body><div id=\"product\"><span class=\"old-price-tag\" id=\"pr-9981\">$899</span></div></body></html>",
+      "originalIndex": 0
+    },
+    {
+      "candidateHtml": "<nav class=\"site-nav\"><a href=\"/about\">About</a></nav>",
+      "candidateIndex": 0,
+      "expectedScore": 49.63,
+      "name": "unrelated-element",
+      "originalFingerprint": {
+        "attributes": {
+          "class": "price"
+        },
+        "parent_attribs": {},
+        "parent_name": "body",
+        "parent_text": null,
+        "path": [
+          "html",
+          "body",
+          "div"
+        ],
+        "tag": "div",
+        "text": "$899"
+      },
+      "originalHtml": "<div class=\"price\">$899</div>",
+      "originalIndex": 0
+    },
+    {
+      "candidateHtml": "<span class=\"price\" id=\"p1\">$949</span>",
+      "candidateIndex": 0,
+      "expectedScore": 96.88,
+      "name": "text-changed-price-updated",
+      "originalFingerprint": {
+        "attributes": {
+          "class": "price",
+          "id": "p1"
+        },
+        "parent_attribs": {},
+        "parent_name": "body",
+        "parent_text": null,
+        "path": [
+          "html",
+          "body",
+          "span"
+        ],
+        "tag": "span",
+        "text": "$899"
+      },
+      "originalHtml": "<span class=\"price\" id=\"p1\">$899</span>",
+      "originalIndex": 0
+    },
+    {
+      "candidateHtml": "<html><body><ul class=\"list\"><li>Item A</li><li class=\"target\" data-id=\"42\">Item B updated</li><li>Item C</li><li>Item D</li></ul></body></html>",
+      "candidateIndex": 2,
+      "expectedScore": 92.5,
+      "name": "nested-with-siblings",
+      "originalFingerprint": {
+        "attributes": {
+          "class": "target",
+          "data-id": "42"
+        },
+        "parent_attribs": {
+          "class": "list"
+        },
+        "parent_name": "ul",
+        "parent_text": null,
+        "path": [
+          "html",
+          "body",
+          "ul",
+          "li"
+        ],
+        "siblings": [
+          "li",
+          "li"
+        ],
+        "tag": "li",
+        "text": "Item B"
+      },
+      "originalHtml": "<html><body><ul class=\"list\"><li>Item A</li><li class=\"target\" data-id=\"42\">Item B</li><li>Item C</li></ul></body></html>",
+      "originalIndex": 2
+    },
+    {
+      "candidateHtml": "<p>Just some other text</p>",
+      "candidateIndex": 0,
+      "expectedScore": 97.06,
+      "name": "bare-element-no-attrs",
+      "originalFingerprint": {
+        "attributes": {},
+        "parent_attribs": {},
+        "parent_name": "body",
+        "parent_text": null,
+        "path": [
+          "html",
+          "body",
+          "p"
+        ],
+        "tag": "p",
+        "text": "Just some text"
+      },
+      "originalHtml": "<p>Just some text</p>",
+      "originalIndex": 0
+    }
+  ],
+  "scraplingVersion": "0.4.9"
+}
