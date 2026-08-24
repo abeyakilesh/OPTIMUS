@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Tilt } from "./motion";
 import {
   ArrowRight,
@@ -81,13 +82,13 @@ export default function Hero() {
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <a
-              href="#start"
+            <Link
+              href="/chat"
               className="group inline-flex items-center gap-2 rounded-lg bg-ink px-5 py-3 text-[15px] font-medium text-white transition hover:bg-ink/88"
             >
               Start for free
               <ArrowRight className="fx-nudge h-4 w-4" />
-            </a>
+            </Link>
             <a
               href="#how"
               className="inline-flex items-center gap-2 rounded-lg border border-line-2 px-5 py-3 text-[15px] font-medium text-ink transition hover:border-cyan/45 hover:bg-mist"

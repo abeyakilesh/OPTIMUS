@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowRight, Check } from "./Icons";
 
 const POINTS = ["No credit card", "Your own model key", "Delete everything in one click"];
@@ -29,13 +30,13 @@ export default function CTA() {
         </p>
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <a
-            href="#signup"
+          <Link
+            href="/chat"
             className="group inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan to-cyan-dark px-7 py-3.5 text-[15px] font-semibold text-white transition hover:brightness-110"
           >
             Start free
             <ArrowRight className="fx-nudge h-4 w-4" />
-          </a>
+          </Link>
           <a
             href="#docs"
             className="group inline-flex items-center gap-2 rounded-lg border border-white/22 px-6 py-3.5 text-[15px] font-medium text-white/88 transition hover:border-white/45 hover:text-white"

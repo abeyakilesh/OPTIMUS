@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Logo, ChevronDown, Globe } from "./Icons";
 
 const LINKS = ["Product", "Solutions", "Resources"] as const;
@@ -56,12 +57,12 @@ export default function Nav() {
             Sign in
           </a>
 
-          <a
-            href="#start"
+          <Link
+            href="/chat"
             className="rounded-lg bg-ink px-4 py-2 text-[14px] font-medium text-white transition hover:bg-ink/88"
           >
             Get started free
-          </a>
+          </Link>
 
           <button
             onClick={() => setOpen((v) => !v)}

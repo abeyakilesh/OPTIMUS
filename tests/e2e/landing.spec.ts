@@ -62,6 +62,24 @@ test.describe("landing page", () => {
     ).toBeVisible();
   });
 
+  test("the primary CTAs lead to the real chat page, not a dead anchor", async ({ page }) => {
+    // These used to be #start / #signup — scroll anchors going nowhere real.
+    // The only thing on this site that actually works right now is /chat;
+    // regressing these back to an anchor is exactly the kind of "button that
+    // fakes it" Directive #4 rules out.
+    await page.goto("/");
+    await page.getByRole("link", { name: "Get started free" }).click();
+    await expect(page).toHaveURL(/\/chat$/);
+
+    await page.goto("/");
+    await page.getByRole("link", { name: "Start for free" }).click();
+    await expect(page).toHaveURL(/\/chat$/);
+
+    await page.goto("/");
+    await page.getByRole("link", { name: "Start free", exact: true }).click();
+    await expect(page).toHaveURL(/\/chat$/);
+  });
+
   test("has no console errors", async ({ page }) => {
     const errors: string[] = [];
     page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
