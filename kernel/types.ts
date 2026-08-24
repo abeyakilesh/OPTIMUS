@@ -173,6 +173,37 @@ export interface CapabilityContext {
   /** Persist bytes and get back a content address. */
   putArtifact(data: string): Promise<ArtifactId>;
   readArtifact(id: ArtifactId): Promise<string>;
+  /**
+   * Runs a child process to completion (SERVICE-fate capabilities: the real
+   * engine runs as its own process; OPTIMUS talks to it, never rewrites it).
+   * Gated on `proc:spawn`. `input` is written to the process's stdin and the
+   * stream closed, so the process can read a full request before acting.
+   *
+   * `timeoutMs` is enforced HERE, independently of the step's wall-time
+   * budget — the harness only checks that budget between attempts, so a
+   * single hung process could otherwise block past it. On timeout the
+   * process is killed and this rejects; it never leaves an orphan running.
+   */
+  spawnProcess(spec: ProcessSpec): Promise<ProcessResult>;
+}
+
+export interface ProcessSpec {
+  command: string;
+  args?: string[];
+  /** Written to stdin, then the stream is closed. Omit for no stdin input. */
+  input?: string;
+  /** Hard kill ceiling for this one process — see spawnProcess's docstring. */
+  timeoutMs: number;
+  /** Additional environment variables, merged over a minimal safe base. */
+  env?: Record<string, string>;
+}
+
+export interface ProcessResult {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  /** True when spawnProcess killed the process for exceeding timeoutMs. */
+  timedOut: boolean;
 }
 
 /** A check the verification spine can run. */

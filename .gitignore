@@ -44,4 +44,10 @@ yarn-error.log*
 next-env.d.ts
 .rules-staged/
 !.env.example
-README.md
+
+# Only the root README (the landing-page doc, deliberately untracked — see
+# git history). A bare `README.md` here would match every README.md in the
+# repo, silently swallowing subdirectory docs like
+# kernel/capabilities/*/README.md — confirmed this was happening before
+# fixing it (`git check-ignore -v` pointed at this exact line).
+/README.md
