@@ -144,6 +144,26 @@ jobs:
           AI_REVIEW_RESULT: ${{ needs.ai-review.result }}
         run: node scripts/gate-coverage.mjs >> "$GITHUB_STEP_SUMMARY"
 
+      # Visibility is part of the protection config, not a preference. On
+      # GitHub Free, making this repo private returns 403 for branch
+      # protection AND disables CodeQL — while every workflow here keeps
+      # running and keeps going green. That happened on 2026-08-25 and was
+      # invisible until someone pushed straight to main and it landed.
+      # `.private` is readable with the default GITHUB_TOKEN; the protection
+      # endpoint itself needs admin scope, so this checks the cause rather
+      # than the symptom. See .github/branch-protection.md.
+      - name: Repository must be public, or the gauntlet is advisory
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          is_private=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .private)
+          echo "repository private: ${is_private}"
+          if [ "${is_private}" != "false" ]; then
+            echo "::error::Repository is PRIVATE. On GitHub Free that silently disables branch protection and CodeQL while CI still reports green. Nothing here is load-bearing until it is public again — see .github/branch-protection.md."
+            exit 1
+          fi
+          echo "public — branch protection and CodeQL can be load-bearing" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Fail if any required gate failed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: |
