@@ -150,6 +150,26 @@ export interface ContractReport {
  * Temperature 0 deliberately: this asks whether a model CAN comply when told
  * to, and sampling noise would turn a gate into a coin flip.
  */
+/**
+ * Every probe prompt gets a unique trailing line before it is sent.
+ *
+ * NOT cosmetic. The gateway these probes run through caches completions on the
+ * message content: an identical prompt came back in **0.08s** where a novel one
+ * took **28.99s**, and neither a varied `seed` nor a varied `user` field missed
+ * the cache. With fixed prompts, every run after the first would have graded a
+ * stored string — the contract would pass for a model that had been swapped,
+ * requantised or deleted, and `maxAgeDays` re-qualification would re-read the
+ * same cache entry it was meant to replace. A gate that reports green without
+ * running anything is the exact defect this file exists to catch.
+ *
+ * The line is inert by construction, and verified so: both models answered
+ * correctly with it appended, and cache-miss latency returned (4.0s / 15.7s).
+ */
+function withNonce(prompt: string): string {
+  const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prompt}\n\n[request-id: ${nonce} — ignore this line, it is not part of the question]`;
+}
+
 export async function runModelContract(
   baseUrl: string,
   model: string,
@@ -168,7 +188,7 @@ export async function runModelContract(
           model,
           stream: false,
           temperature: 0,
-          messages: [{ role: "user", content: probe.prompt }],
+          messages: [{ role: "user", content: withNonce(probe.prompt) }],
         }),
         signal: AbortSignal.timeout(timeoutMs),
       });

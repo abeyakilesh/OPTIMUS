@@ -22,6 +22,7 @@ import { buildBroker } from "@/kernel/registry";
 import type { LlmChatMessage } from "@/kernel/capabilities/omniroute/chat";
 import { DATA_DIR } from "@/lib/data-dir";
 import { resolveChatContent } from "@/lib/missions/resolveChatContent";
+import { qualificationOf } from "@/kernel/models/qualified";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +103,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { ok: false, reason: "requires { messages: { role, content }[] }" },
       { status: 400 },
+    );
+  }
+
+  // THE MODEL CONTRACT GATE (#49). This is the point where a model is
+  // *registered as the chat backend*, so it is where qualification is checked.
+  //
+  // Deliberately here and not as an `enum` on llm.chat's input constraint: the
+  // capability legitimately accepts a bad model id, because
+  // omniroute-chat.test.ts must send one THROUGH to OmniRoute to exercise its
+  // upstream failure path. Refusing at the broker would leave that test green
+  // while it stopped testing what its name says.
+  //
+  // Directive #4: an unqualified backend is UNAVAILABLE and says so. It never
+  // runs the mission anyway and never fabricates a reply.
+  const verdict = qualificationOf(OMNIROUTE_MODEL);
+  if (!verdict.qualified) {
+    return NextResponse.json(
+      { ok: false, reason: `model layer unavailable — ${verdict.reason}` },
+      { status: 503 },
     );
   }
 
