@@ -108,7 +108,24 @@ export interface Evidence {
   exitCode: number;
   durationMs: number;
   cost: number;
+  /**
+   * Artifacts this step NEWLY wrote to the store. Content-addressing means an
+   * identical artifact already present is not re-created, so this can be empty
+   * for a step that genuinely produced output — see producedArtifactIds.
+   */
   artifactIds: ArtifactId[];
+  /**
+   * Every artifact this step produced, whether or not the write was new.
+   * Always populated when the step returned an artifact id.
+   *
+   * Round 1 surfaced why both are needed: navigating the same page twice
+   * yields byte-identical output, the store already holds that hash, and the
+   * second step's `artifactIds` came back EMPTY — its evidence pointed at
+   * nothing. The step did produce that content; that fact belongs in evidence
+   * regardless of whether the write was new. Weakening content-addressing to
+   * fix it would have been the wrong trade.
+   */
+  producedArtifactIds: ArtifactId[];
   checks: CheckResult[];
   /** Hash of the step's resolved inputs — drives memoisation. */
   inputHash: string;
