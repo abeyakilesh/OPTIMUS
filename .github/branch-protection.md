@@ -1,12 +1,43 @@
 # Branch protection — `main`
 
-Cannot be set from the repo; it needs the GitHub API or UI. Run this **after**
-the first Gauntlet run on `main`, so GitHub knows the check names.
+Cannot be set from the repo; it needs the GitHub API or UI.
 
 ```bash
 gh api -X PUT repos/abeyakilesh/OPTIMUS/branches/main/protection \
   --input .github/branch-protection.json
 ```
+
+> ## ⚠️ This file was written, and then nobody ran the command
+>
+> For **38 pull requests**, `GET /branches/main/protection` returned **404** and
+> `/rulesets` returned `[]`. Everything below was true, clearly written, believed
+> to be in force, and enforcing nothing. Merges were gated by discipline.
+>
+> Nothing bad happened — every merged PR was green — which is exactly why it is
+> worth naming rather than quietly fixing. It is the first of the three cases
+> behind **THE ENFORCEMENT RULE** in `CLAUDE.md`: *a rule that isn't executed by
+> something is a comment.*
+
+## Applying it is not verifying it
+
+A session that runs the command and closes the issue has repeated the original
+mistake one level up — intent, recorded, unverified. Work the checklist:
+
+- [ ] `gh api -X PUT ... --input .github/branch-protection.json` succeeds
+- [ ] `gh api repos/abeyakilesh/OPTIMUS/branches/main/protection` returns the
+      config, not a 404
+- [ ] An open PR with everything green still reports `mergeStateStatus: CLEAN`
+      — i.e. the required-contexts list names checks that **actually report**.
+      A typo'd context name blocks every PR forever and looks identical to
+      "the gate is working"
+- [ ] A direct `git push origin main` is **refused**
+- [ ] A deliberately-red PR is **refused** — the only test that proves the
+      required checks are load-bearing rather than decorative
+- [ ] `e2e` / `perf`, which skip via change detection, do not leave a PR
+      pending. Only then consider adding them to the required list
+
+Until the red-PR check is done, this is applied-but-unproven, which is a better
+state than 404 and not the same as done.
 
 ## Non-negotiables (from CLAUDE.md)
 

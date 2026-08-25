@@ -1,8 +1,38 @@
 {
+  "_comment_contexts": [
+    "These names must match the check names GitHub sees on a PULL REQUEST head",
+    "commit, which are not always what the same job is called on a push to main",
+    "(`absorption / absorption rules` on a PR vs `absorption` on a push).",
+    "",
+    "DELIBERATELY ABSENT, each for a reason:",
+    "  CodeQL          an ORPHAN. Code-scanning default setup reports",
+    "                  `not-configured`, but a stale check of that name still",
+    "                  reports and now hard-fails with '1 configuration not",
+    "                  found'. Requiring it would block every PR forever. Our",
+    "                  real one is `static-security / CodeQL (javascript-",
+    "                  typescript)`, which IS required below. See issue #37.",
+    "  e2e, perf       gated on change detection, so they legitimately do not",
+    "                  run on every PR. GitHub treats an if:-skipped Actions job",
+    "                  as satisfying a required check, but that behaviour is",
+    "                  subtle enough that it gets verified before it gets",
+    "                  relied on — see the CHECKLIST in branch-protection.md.",
+    "  CodeRabbit,     third-party integrations. Not ours, so not a gate we get",
+    "  Vercel,         to call non-negotiable.",
+    "  scorecard"
+  ],
   "required_status_checks": {
     "strict": true,
     "contexts": [
       "change detection",
+      "build / build · typecheck · lint",
+      "unit / unit + contract",
+      "static-security / secret scan",
+      "static-security / ast-grep (14 active rules)",
+      "static-security / dependency CVEs",
+      "static-security / CodeQL (javascript-typescript)",
+      "supply-chain / licenses + SBOM",
+      "ai-review / claude security review",
+      "absorption / absorption rules",
       "gate coverage (read me)"
     ]
   },
@@ -21,6 +51,13 @@
     "require_code_owner_reviews": false,
     "required_approving_review_count": 0
   },
+  "_comment_signing": [
+    "required_signed_commits is deliberately ABSENT, not forgotten. Enabling it",
+    "while commit.gpgsign is unset rejects every subsequent push INCLUDING the",
+    "one that would fix it. The work is key generation + GitHub upload + local",
+    "git config, none of which is a repo setting. Tracked as issue #39, and it",
+    "gets added here only after a commit shows Verified on github.com."
+  ],
   "restrictions": null,
   "required_linear_history": true,
   "allow_force_pushes": false,
