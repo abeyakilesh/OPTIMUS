@@ -62,3 +62,16 @@ README.md
 # pinned requirements.txt beside the bridge, never vendored.
 .venv/
 **/.venv/
+
+# ── the build bible — deliberately NOT tracked ──────────────────────────────
+# Owner's decision, 2026-08-25. It was tracked here from PR #35 so rule changes
+# went through the same gauntlet as code changes; that trade is reversed in
+# favour of keeping it out of the repository entirely.
+#
+# This entry is the load-bearing half. Untracking it without ignoring it leaves
+# the file sitting untracked in the working tree, where the next `git add -A`
+# silently commits it straight back.
+#
+# ⚠️ Ignoring does NOT unpublish. It was in this repo's history from #35 to
+# 2026-08-25 while the repo was PUBLIC. History still holds it.
+CLAUDE.md
