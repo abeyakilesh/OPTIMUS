@@ -32,6 +32,17 @@ export default defineConfig({
       // Nothing here exercises a genuinely live model; that path is proven
       // by hand against a real instance, and honestly remains an e2e gap.
       OMNIROUTE_BASE_URL: "http://127.0.0.1:9",
+      // Provider keys are blanked for the SAME reason the port above is
+      // pinned: without this the suite reads whatever is in .env and makes
+      // real calls to api.groq.com, api.mistral.ai and Google on every run.
+      // That is live egress with real credentials triggered by `npm test`,
+      // and it makes the result depend on whose laptop it ran on. Blank keys
+      // give the deterministic "not configured" state the settings page has
+      // to handle anyway. The connected path is covered by the unit suite and
+      // by mocked renders in providers.spec.ts.
+      GROQ_API_KEY: "",
+      MISTRAL_API_KEY: "",
+      GEMINI_API_KEY: "",
     },
   },
 });
