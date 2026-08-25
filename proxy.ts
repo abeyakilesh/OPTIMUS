@@ -5,8 +5,16 @@
  * the Node.js runtime here, so this can use the same node:crypto-based
  * session verification as the login route, not a separate Edge-only path.
  *
- * Scope is deliberately narrow: only /chat and /api/missions are gated. The
- * marketing site stays public — that's the whole point of a funnel.
+ * Scope is deliberately narrow: /chat, /api/missions, /settings and
+ * /api/providers are gated. The marketing site stays public — that's the
+ * whole point of a funnel.
+ *
+ * /settings and /api/providers are NOT optional additions to that list. The
+ * status route reads provider keys from the environment; even masked, its
+ * output tells an unauthenticated caller which providers exist, whether each
+ * key is valid, and — via the test route — lets them spend the account's
+ * quota one request at a time. It is gated for the same reason /api/missions
+ * is.
  */
 
 import { NextResponse, type NextRequest } from "next/server";
@@ -34,5 +42,13 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/chat", "/chat/:path*", "/api/missions", "/api/missions/:path*"],
+  matcher: [
+    "/chat",
+    "/chat/:path*",
+    "/api/missions",
+    "/api/missions/:path*",
+    "/settings",
+    "/settings/:path*",
+    "/api/providers/:path*",
+  ],
 };
