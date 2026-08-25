@@ -15,10 +15,10 @@ async function main(): Promise<void> {
   const model = process.argv[2] ?? process.env.OPTIMUS_MODEL ?? "llama3.2:latest";
   const baseUrl = process.argv[3] ?? process.env.OPTIMUS_MODEL_BASE_URL ?? "http://127.0.0.1:11434";
 
-  const bold = (s) => `\x1b[1m${s}\x1b[0m`;
-  const dim = (s) => `\x1b[2m${s}\x1b[0m`;
-  const green = (s) => `\x1b[32m${s}\x1b[0m`;
-  const red = (s) => `\x1b[31m${s}\x1b[0m`;
+  const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
+  const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
+  const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
+  const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
 
   console.log(`\n${bold("MODEL CONTRACT")} ${model} ${dim(`via ${baseUrl}`)}\n`);
 
