@@ -67,6 +67,34 @@ A description that has gone wrong is worse than no description: it is the same d
 
 ---
 
+## THE ENFORCEMENT RULE — a rule that isn't executed by something is a comment
+
+*Added 2026-08-25. Third instance of one pattern: **documented intent mistaken for enforcement.** Each time, a real rule existed, was written down clearly, was believed to be in force, and had no mechanism behind it.*
+
+| # | The rule | Where it was written | What was actually enforcing it |
+|---|---|---|---|
+| 1 | "Nothing merges red · no direct push to `main` · linear history" | `.github/branch-protection.md`, with the exact `gh api` command to apply it | **Nothing.** Nobody ran the command. `GET /branches/main/protection` → **404**, rulesets → `[]`. For **38 PRs** the non-negotiables existed only as prose |
+| 2 | Gate 11 — "fidelity vs parent, golden inputs must match" | `CAPABILITY ONBOARDING PIPELINE`, and 35 of the 100 Absorption Score points | A hand-typed expected value inside a vitest file. Real testing, but it cannot fail a PR on upstream drift, and the "golden" was whatever the parent did that afternoon (issue #34) |
+| 3 | "These CI gates are not yet implemented" | a hardcoded table inside `gauntlet.yml` | Nothing derived it from truth, so it drifted — it printed "gate 10 · no sandbox" for a day after K4 merged (fixed in #33) |
+
+**The rule.** Every rule in this file that is meant to *hold* names the thing that executes it. If nothing executes it yet, it is written down as **UNENFORCED** on the same line, so nobody reads prose and sees a gate.
+
+> A rule with no mechanism is a comment. It may be a true, wise, well-argued comment. It still does not stop anything.
+
+**How to record one honestly:**
+
+- `enforced by: scripts/gate-coverage.mjs + tests/unit/gate-coverage.test.ts` — a real mechanism, named
+- `UNENFORCED — blocked on #34` — honest, and greppable
+- ~~"Non-negotiable."~~ — this is the failure mode. It reads strongest and enforces least
+
+**Why this keeps happening, and it is not carelessness.** Writing the rule down feels like completing it. The document changes, the intent is now unambiguous, and the work of building the mechanism looks like a follow-up rather than like *the actual thing*. All three instances above were written by someone who meant them.
+
+> **Corollary — applying a setting is not verifying it.** Instance 1's fix is a single API call, and a session that makes that call and closes the issue has repeated the same mistake one level up: intent, recorded, unverified. The close condition is a deliberately-red PR that is actually refused.
+
+**Relationship to the two neighbouring rules.** THE SELF-DESCRIPTION RULE says a description must match what it describes. This one says a rule must be executed by something. They fail together — instance 3 above is on both lists — but they are different questions, and a document can pass either while failing the other.
+
+---
+
 ## THE 5 FATES
 
 | Fate | When | How | Example |
@@ -394,7 +422,9 @@ A category round is where overlap earns its keep: three scrapers are only a fall
 **Pipeline flow:**
 `PR → fast gates (build/lint/unit) → security + fidelity → perf + scale → ephemeral preview + E2E → all green → human review → merge → canary deploy → auto-rollback on regression → promote`
 
-**Branch protection (non-negotiable):** no direct push to `main` · all checks required green · ≥1 review · signed commits · linear history · every capability change updates its manifest + golden tests.
+**Branch protection** — *enforced by `.github/branch-protection.json`, applied via the API; see `.github/branch-protection.md` for the verification checklist.* No direct push to `main` · all checks required green · linear history · every capability change updates its manifest + golden tests.
+
+> Two of the original entries are **UNENFORCED**, named here rather than left reading as though they hold (THE ENFORCEMENT RULE): **signed commits** — blocked on #39, and enabling the setting before signing is configured rejects every push including the fix; **≥1 review** — unsatisfiable on a one-developer repo, since GitHub forbids approving your own PR, so requiring it would make every PR mergeable only by admin bypass. Raise to 1 the day a second person gets write access. This whole section was itself the first instance of the rule: written, believed, and enforcing nothing for 38 PRs.
 
 **Tooling map (from our own repos):** ast-grep = static rules · claude-code-security-review = AI diff review · harbor = eval/fidelity/regression scoring · strix/hexstrike = dynamic security · codesandbox = ephemeral test envs · coolify = preview deploys · gitnexus = PR impact analysis · git-worktree-runner = parallel isolated test runs.
 
