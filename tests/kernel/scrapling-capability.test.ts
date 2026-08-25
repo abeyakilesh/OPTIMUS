@@ -11,7 +11,7 @@ import { describe, it, expect } from "vitest";
 import { Broker } from "../../kernel/broker";
 import { Harness } from "../../kernel/harness";
 import { MemoryArtifactStore } from "../../kernel/artifacts";
-import { artifactExists } from "../../kernel/builtin";
+import { artifactIntact } from "../../kernel/builtin";
 import type { Capability } from "../../kernel/types";
 import type { ElementFingerprint } from "../../kernel/scrapling";
 import {
@@ -38,7 +38,7 @@ function buildKernel() {
   const broker = new Broker();
   broker.register(scraplingRelocate);
   broker.registerCheck(relocateContractHonored);
-  broker.registerCheck(artifactExists);
+  broker.registerCheck(artifactIntact);
   const store = new MemoryArtifactStore();
   const harness = new Harness({ broker, store });
   return { broker, store, harness };
@@ -62,7 +62,7 @@ describe("gate 8/11 · callable end to end through the harness", () => {
       capabilityId: "scrapling.relocate",
       input: { fingerprint: OLD_FINGERPRINT, pageHtml: REDESIGNED_PAGE },
       dependsOn: [],
-      checks: ["relocate.contractHonored", "artifact.exists"],
+      checks: ["relocate.contractHonored", "artifact.intact"],
     });
 
     expect(outcome.status).toBe("passed");
@@ -172,7 +172,7 @@ describe("gate 12 · verify — the contract check actually blocks a lie", () =>
 describe("gate 10 · permission boundary applies to this capability", () => {
   it("scrapling.relocate declares zero permissions, so net/fs access is refused if ever attempted", async () => {
     const broker = new Broker();
-    broker.registerCheck(artifactExists);
+    broker.registerCheck(artifactIntact);
 
     // Same manifest as the real capability (permissions: []), but this
     // implementation misuses ctx the way a bug or a compromised dependency
@@ -201,7 +201,7 @@ describe("gate 10 · permission boundary applies to this capability", () => {
       capabilityId: "scrapling.relocate.overreaching",
       input: {},
       dependsOn: [],
-      checks: ["artifact.exists"],
+      checks: ["artifact.intact"],
     });
 
     expect(outcome.status).not.toBe("passed");

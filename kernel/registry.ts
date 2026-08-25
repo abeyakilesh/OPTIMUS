@@ -28,7 +28,7 @@
 import { Broker } from "./broker";
 import type { Capability, Check } from "./types";
 import type { Repair } from "./harness";
-import { webFetch, htmlExtractTitle, titleNonEmpty, artifactExists } from "./builtin";
+import { webFetch, htmlExtractTitle, titleNonEmpty, artifactIntact } from "./builtin";
 import {
   scraplingRelocate,
   relocateContractHonored,
@@ -57,7 +57,7 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
 /** Every check. A capability's check must be registered or its steps cannot pass. */
 export const ALL_CHECKS: readonly Check[] = [
   titleNonEmpty,
-  artifactExists,
+  artifactIntact,
   relocateContractHonored,
   relocateFoundMatch,
   llmChatSucceeded,
