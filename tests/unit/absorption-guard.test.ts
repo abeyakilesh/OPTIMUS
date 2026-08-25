@@ -168,14 +168,28 @@ describe("the file-based checks run against a REAL diff", () => {
   // fire" defect the guard was being fixed for.
   const rev = (r: string) => execFileSync("git", ["rev-parse", r], { encoding: "utf8" }).trim();
 
-  it("does not crash when there is an actual list of changed files", () => {
-    const r = runGuard("A normal change.", "chore: something", { base: rev("HEAD~1"), head: rev("HEAD") });
+  // git's well-known empty-tree object. Diffing HEAD against it lists every
+  // tracked file, which is all these tests need — and unlike HEAD~1 it exists
+  // in a SHALLOW clone. CI checks out at depth 1, so the first version of
+  // these tests passed locally and failed in CI on `HEAD~1` not existing.
+  const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+  it("detects capabilities from the file list, and counts them", () => {
+    // Diffing HEAD against the empty tree lists every tracked file, so all
+    // three kernel/capabilities entries appear. Two previously-dead checks
+    // fire here for the first time: file-based absorption detection, and
+    // one-repo-per-PR. Before the prefix fix both were unreachable.
+    const r = runGuard("A normal change.", "chore: something", { base: EMPTY_TREE, head: rev("HEAD") });
     expect(r.out).not.toMatch(/ReferenceError/);
-    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/This PR absorbs 3 repos/);
+    expect(r.out).toMatch(/browser-use/);
+    expect(r.out).toMatch(/omniroute/);
+    expect(r.out).toMatch(/scrapling-relocate/);
+    expect(r.code).toBe(1);
   });
 
   it("still reaches its verdict with a populated diff and an absorption title", () => {
-    const r = runGuard("No score in this body.", "absorb/example: PORT", { base: rev("HEAD~1"), head: rev("HEAD") });
+    const r = runGuard("No score in this body.", "absorb/example: PORT", { base: EMPTY_TREE, head: rev("HEAD") });
     expect(r.out).not.toMatch(/ReferenceError/);
     expect(r.code).toBe(1);
     expect(r.out).toMatch(/No Absorption Score found/);
