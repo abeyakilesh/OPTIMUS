@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-// @ts-expect-error — plain .mjs script, no types, intentionally shared with CI
+// Plain .mjs, deliberately: this is the SAME module CI runs, not a re-import
+// of the logic. Testing a copy would recreate the duplication being fixed.
 import { absentGates, renderSummary } from "../../scripts/gate-coverage.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
