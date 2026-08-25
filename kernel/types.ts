@@ -7,6 +7,7 @@
  */
 
 import type { Isolation } from "./sandbox";
+import type { InputConstraints } from "./inputContract";
 export type { Isolation };
 
 /** Content-addressed artifact id: "sha256:<64 hex>". */
@@ -60,6 +61,23 @@ export interface CapabilityManifest {
    * The broker refuses to register a permission whose radius is unbounded.
    */
   isolation?: Isolation;
+  /**
+   * Gate 8, third leg. Permissions say WHAT, isolation says WHERE, and this
+   * says WHAT IT MAY BE ASKED TO DO — the shape and permitted values of the
+   * step input this capability will accept.
+   *
+   * REQUIRED, not optional, and that is the whole point: an optional field
+   * becomes decoration on the manifests nobody revisits. A capability that
+   * genuinely takes no input declares `{}`, which means "the input must be
+   * empty" — not "anything goes".
+   *
+   *   K4 refuses the outbound connection; it does not refuse a capability
+   *   constructing a request to a host it was handed. Those are different
+   *   layers.
+   *
+   * See kernel/inputContract.ts for the three real holes this closed.
+   */
+  inputConstraints: InputConstraints;
   /** Budgets a step gets by default when it invokes this capability. */
   defaultBudget: Budget;
   /** Human-readable, used in evidence. */

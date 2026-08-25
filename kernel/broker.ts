@@ -9,6 +9,7 @@
 
 import type { Budget, Capability, CapabilityManifest, Check } from "./types";
 import type { Isolation } from "./sandbox";
+import { assertConstraints, checkInput } from "./inputContract";
 
 export class BrokerError extends Error {}
 
@@ -64,6 +65,23 @@ function assertBoundedRadius(manifest: CapabilityManifest): void {
   }
 }
 
+/**
+ * Gate 8, third leg, enforced at registration: a manifest's inputConstraints
+ * must themselves be well-formed. A malformed constraint (an empty enum, an
+ * array with no element type, a url with neither allowedHosts nor an explicit
+ * anyHost) would silently accept everything it was meant to refuse, which is
+ * strictly worse than having no constraint — it reads as protection.
+ */
+function assertInputContract(manifest: CapabilityManifest): void {
+  if (manifest.inputConstraints === undefined) {
+    throw new BrokerError(
+      `${manifest.id}: manifest declares no inputConstraints. A capability that takes no input ` +
+        `declares {} — meaning "the input must be empty". There is no value meaning "anything goes"`,
+    );
+  }
+  assertConstraints(manifest.inputConstraints, manifest.id);
+}
+
 export class Broker {
   private readonly capabilities = new Map<string, Capability>();
   private readonly checks = new Map<string, Check>();
@@ -77,6 +95,7 @@ export class Broker {
     }
     assertValidBudget(manifest.defaultBudget, manifest.id);
     assertBoundedRadius(manifest);
+    assertInputContract(manifest);
     this.capabilities.set(manifest.id, capability);
   }
 
@@ -98,6 +117,24 @@ export class Broker {
     const found = this.checks.get(id);
     if (!found) throw new BrokerError(`No such check: ${id}`);
     return found;
+  }
+
+  /**
+   * Refuse step input that a capability's manifest does not accept — BEFORE
+   * `run()` is ever called, so the capability never sees a value it did not
+   * declare, and never gets the chance to build a request (or a command line)
+   * around one.
+   *
+   * This lives on the broker rather than in the capability because a
+   * capability checking its own input is the capability trusting itself. The
+   * broker is the one place every invocation already passes through, which is
+   * the same reason the permission boundary lives at a single door.
+   */
+  validateInput(capabilityId: string, input: unknown): void {
+    const violations = checkInput(this.manifest(capabilityId).inputConstraints, input);
+    if (violations.length > 0) {
+      throw new BrokerError(`${capabilityId}: input refused — ${violations.join("; ")}`);
+    }
   }
 
   manifest(id: string): CapabilityManifest {

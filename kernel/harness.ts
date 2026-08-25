@@ -250,6 +250,16 @@ export class Harness {
 
     const began = this.now();
     try {
+      // Gate 8, third leg — before run(), not inside it. A capability that
+      // validates its own input is a capability trusting itself; and by the
+      // time run() has the value, it is one line away from putting it in a
+      // request or a command line.
+      //
+      // Checked on EVERY attempt rather than once up front, because `repair`
+      // may rewrite the input between attempts — a repair that produces an
+      // input the manifest refuses must be caught, not trusted for having
+      // come from inside the loop.
+      this.deps.broker.validateInput(manifest.id, action.input);
       const output = await capability.run(action.input, context);
       return { ok: true, output, durationMs: this.now() - began, cost: 1 };
     } catch (error) {

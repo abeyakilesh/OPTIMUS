@@ -104,7 +104,13 @@ describe("WP-001 acceptance criteria", () => {
           {
             id: "extract",
             capabilityId: "html.extractTitle.sabotaged",
-            input: {},
+            // A VALID input, deliberately. This was `{}` until input
+            // constraints landed, at which point the step started failing at
+            // the manifest's door instead of at the check — still red, still
+            // "passing" this test, and no longer proving a single thing about
+            // verification. A test that goes on passing for a new reason is
+            // worse than one that breaks.
+            input: { artifactId: addressOf(FIXTURE_HTML) },
             dependsOn: [],
             checks: ["title.nonEmpty", "artifact.exists"],
           },
@@ -119,6 +125,14 @@ describe("WP-001 acceptance criteria", () => {
       const checks = result.state.steps.extract.evidence?.checks ?? [];
       expect(checks.some((c) => !c.passed)).toBe(true);
       expect(checks.find((c) => !c.passed)?.reason).toBeTruthy();
+
+      // Specifically: a REAL verification check blocked it. Asserting only
+      // "something failed" is what let the input-constraint change above slip
+      // past unnoticed — the step never reached the capability, and the
+      // assertions above were all still true.
+      const failed = checks.filter((c) => !c.passed).map((c) => c.checkId);
+      expect(failed, "the declared checks must be what blocked this").toContain("title.nonEmpty");
+      expect(failed).not.toContain("capability.completed");
     });
 
     it("refuses to pass a step that declares no checks at all", async () => {
@@ -178,6 +192,7 @@ describe("WP-001 acceptance criteria", () => {
         version: "1.0.0",
         permissions: ["net:read"], // note: NO fs:write
         isolation: { allowedHosts: ["example.test"] },
+        inputConstraints: {},
         defaultBudget: { maxAttempts: 1, maxWallTimeMs: 5000, maxCost: 5 },
         description: "Fetches, then tries to write a file it never declared.",
       },
@@ -216,6 +231,14 @@ describe("WP-001 acceptance criteria", () => {
           id: "always.wrong",
           version: "1.0.0",
           permissions: [],
+          // `nudge` is what the repair function below adds between attempts.
+          // It has to be DECLARED: the input contract is checked on every
+          // attempt, so an undeclared field invented by a repair is refused
+          // like any other. That is deliberate — a repair is code writing
+          // input, and shortly it will be an LLM writing input. This test
+          // found it honestly: before `nudge` was declared, the step stopped
+          // after 1 invocation instead of 3.
+          inputConstraints: { nudge: { kind: "number", min: 0, max: 1 } },
           defaultBudget: { maxAttempts: 3, maxWallTimeMs: 10_000, maxCost: 100 },
           description: "Returns an empty title forever.",
         },
@@ -259,6 +282,7 @@ describe("WP-001 acceptance criteria", () => {
           id: "slow.capability",
           version: "1.0.0",
           permissions: [],
+          inputConstraints: {},
           defaultBudget: { maxAttempts: 100, maxWallTimeMs: 1000, maxCost: 1000 },
           description: "Never satisfies its check.",
         },
@@ -297,6 +321,7 @@ describe("WP-001 acceptance criteria", () => {
           version: "1.0.0",
           permissions: [],
           // Each attempt costs 1; allow 2 before the ceiling bites.
+          inputConstraints: {},
           defaultBudget: { maxAttempts: 50, maxWallTimeMs: 60_000, maxCost: 2 },
           description: "Never satisfies its check.",
         },
@@ -331,6 +356,7 @@ describe("WP-001 acceptance criteria", () => {
             id: "no.budget",
             version: "1.0.0",
             permissions: [],
+            inputConstraints: {},
             defaultBudget: { maxAttempts: 0, maxWallTimeMs: 1000, maxCost: 1 },
             description: "zero attempts is not a budget",
           },

@@ -36,6 +36,7 @@ function writer(id: string, files: Array<[string, string]>): Capability {
       version: "1.0.0",
       permissions: ["fs:write"],
       isolation: { writeRoots: [root] },
+      inputConstraints: {}, // takes no input; {} means "must be empty", not "anything goes"
       defaultBudget: { maxAttempts: 1, maxWallTimeMs: 5_000, maxCost: 5 },
       description: "writes files, so its failure path has something to undo",
     },
@@ -120,6 +121,7 @@ describe("rollback is wired into a real step's failure path", () => {
         version: "1.0.0",
         permissions: [],
         isolation: {},
+        inputConstraints: {},
         defaultBudget: { maxAttempts: 1, maxWallTimeMs: 1_000, maxCost: 1 },
         description: "mutates nothing",
       },

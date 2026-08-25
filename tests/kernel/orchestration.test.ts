@@ -73,6 +73,7 @@ function tracked(id: string, timeline: Timeline, ticks = 3): Capability {
       id,
       version: "1.0.0",
       permissions: [],
+      inputConstraints: { stepId: { kind: "string", required: true, maxLength: 200 } },
       defaultBudget: { maxAttempts: 1, maxWallTimeMs: 10_000, maxCost: 10 },
       description: `tracked capability ${id}`,
     },
@@ -288,6 +289,13 @@ describe("multi-agent orchestration", () => {
         id: "work",
         version: "1.0.0",
         permissions: [],
+        // `fixes` is added by the REPAIR function between attempts, so this
+        // fixture also exercises the rule that repaired input is re-validated
+        // rather than trusted for having come from inside the loop.
+        inputConstraints: {
+          stepId: { kind: "string", required: true, maxLength: 200 },
+          fixes: { kind: "number", integer: true, min: 0, max: 100 },
+        },
         defaultBudget: { maxAttempts: 5, maxWallTimeMs: 10_000, maxCost: 50 },
         description: "succeeds only after repair",
       },

@@ -87,6 +87,37 @@ export const llmChat: Capability = {
       // by the boundary, which is the intended behaviour, not a limitation.
       allowedHosts: ["127.0.0.1", "localhost", "[::1]"],
     },
+    inputConstraints: {
+      // THE reason this layer exists. isolation.allowedHosts above stops the
+      // socket opening to a remote host — it does NOT stop this capability
+      // being handed `baseUrl: "https://api.openai.com"` and assembling a
+      // request around it first, Authorization header and all, before K4
+      // refuses the connection. The credential is put into a request that is
+      // then thrown away; that is a leak with good luck, not a boundary.
+      //
+      // The host list is deliberately the same one as isolation.allowedHosts.
+      // Two layers, one policy, both enforced — a reader can check they agree.
+      baseUrl: { kind: "url", allowedSchemes: ["http"], allowedHosts: ["127.0.0.1", "localhost", "[::1]"] },
+      // Bounded, not enumerated: the value is a secret we cannot list. The
+      // length cap is what stops an oversized blob being smuggled through a
+      // header field.
+      apiKey: { kind: "string", maxLength: 512 },
+      model: { kind: "string", required: true, minLength: 1, maxLength: 200 },
+      messages: {
+        kind: "array",
+        required: true,
+        minLength: 1,
+        maxLength: 500,
+        of: {
+          kind: "object",
+          fields: {
+            role: { kind: "string", required: true, enum: ["system", "user", "assistant"] },
+            content: { kind: "string", required: true, maxLength: 500_000 },
+          },
+        },
+      },
+      timeoutMs: { kind: "number", integer: true, min: 1, max: 600_000 },
+    },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: DEFAULT_TIMEOUT_MS, maxCost: 20 },
     description:
       "Sends a chat completion through a local OmniRoute instance's real " +

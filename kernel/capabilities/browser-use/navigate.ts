@@ -15,7 +15,42 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { Capability, Check, CheckResult } from "../../types";
 
-const BRIDGE_PATH = join(dirname(fileURLToPath(import.meta.url)), "bridge.py");
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BRIDGE_PATH = join(HERE, "bridge.py");
+
+/**
+ * The allow-lists behind this capability's two `executable` constraints.
+ *
+ * THE TRUST BOUNDARY, stated plainly, because the env-var terms below look
+ * like a hole and are not one:
+ *
+ *   - STEP INPUT is untrusted. Today it is built by server code in
+ *     app/api/missions/route.ts; the very next kernel task hands that job to
+ *     a PLANNER — an LLM writing step inputs from a user's objective. That is
+ *     the threat: a value chosen downstream of a prompt picking which binary
+ *     the kernel executes.
+ *
+ *   - ENVIRONMENT is the operator. Whoever sets these already chose our PATH,
+ *     our interpreter and our working directory before this process started.
+ *     Nothing is conceded by letting them name a Chrome — they could replace
+ *     the one we hardcoded.
+ *
+ * So the allow-list is: known-good defaults, plus whatever the operator
+ * explicitly declared. Step input may only SELECT from that list; it can
+ * never extend it.
+ */
+const VENV_PYTHON = join(HERE, ".venv", "bin", "python3");
+const MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const LINUX_CHROME = ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
+
+/** Operator-declared additions. Undefined and empty are both ignored. */
+function withOperatorOverride(defaults: readonly string[], envVar: string): readonly string[] {
+  const declared = process.env[envVar]?.trim();
+  return declared ? [...defaults, declared] : defaults;
+}
+
+const ALLOWED_PYTHON = withOperatorOverride(["python3", "python", VENV_PYTHON], "OPTIMUS_TEST_PYTHON");
+const ALLOWED_CHROME = withOperatorOverride([MAC_CHROME, ...LINUX_CHROME], "OPTIMUS_TEST_CHROME_PATH");
 
 export interface BrowserNavigateInput {
   url: string;
@@ -92,6 +127,28 @@ export const browserNavigate: Capability = {
       // point and "not tested" never is. Do not read 3/5 as unfinished work
       // and try to close it in-process; it cannot be closed in-process.
       unconfinedChildEgress: true,
+    },
+    inputConstraints: {
+      // `anyHost` is honest here and not a shrug: navigating the open web is
+      // literally the capability. The SCHEME is the part that was a hole.
+      // Before this constraint, `file:///etc/passwd` went straight to a real
+      // Chromium and came back in output.text — a local file read that K4's
+      // readRoots cannot see, because the read happens inside the child
+      // process (the same blind spot unconfinedChildEgress already admits to
+      // for sockets). `data:` and `javascript:` were equally reachable.
+      url: { kind: "url", required: true, allowedSchemes: ["http", "https"], anyHost: true },
+      // This string was passed straight to spawn() as the command. proc:spawn
+      // gates WHETHER a child may run and isolation.cwd gates WHERE — nothing
+      // gated WHICH BINARY, so step input chose the executable. There is no
+      // shell involved (spawn, not exec), so this was never shell injection;
+      // it was something simpler, which is that the caller picked the program.
+      pythonExecutable: { kind: "executable", allowed: ALLOWED_PYTHON },
+      // Handed to browser-use as the browser binary — the same class of value
+      // as pythonExecutable, and constrained the same way. The list is the
+      // real install locations on the platforms this runs on; a new one is a
+      // reviewable manifest change rather than a runtime surprise.
+      chromeExecutablePath: { kind: "executable", required: true, allowed: ALLOWED_CHROME },
+      headless: { kind: "boolean" },
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 45_000, maxCost: 20 },
     description:

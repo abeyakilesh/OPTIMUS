@@ -147,18 +147,35 @@ export const llmChatScenarios: Scenario[] = [
     },
   },
   {
-    id: "sandbox-blocks-remote-host",
-    intent: "K4 refuses a non-loopback baseUrl — the model layer is local-only by design",
+    id: "remote-host-refused-at-the-contract",
+    // Was "sandbox-blocks-remote-host", asserting K4's message. Input
+    // constraints landed and the refusal moved one layer EARLIER — the value
+    // is now refused at the manifest, before the capability is handed it, so
+    // no request is ever assembled around a remote host.
+    //
+    // The expectation is updated rather than loosened. Accepting "it failed
+    // somehow" here is the exact masking bug this suite already had once: a
+    // scenario that passes on any failure stops being evidence.
+    //
+    // K4 is NOT untested by this change — it is unreachable-by-construction
+    // for this input, because the contract's host list and
+    // isolation.allowedHosts are deliberately the same list. K4's own layer
+    // is proven independently in tests/kernel/input-contract.test.ts, which
+    // registers a variant with the constraint loosened and shows the sandbox
+    // still stops it.
+    intent: "A non-loopback baseUrl is refused before the capability sees it — the model layer is local-only by design",
     input: ask("hello", { baseUrl: "https://api.openai.com" }),
     checks: CHECKS,
     verdict(r) {
       const reason = r.evidence?.checks?.find((c) => !c.passed)?.reason ?? "";
-      const blocked = /sandbox violation|may only reach/i.test(reason);
+      // Names the layer AND the offending value: a refusal that mentions
+      // neither could be any failure at all.
+      const blocked = /input refused/i.test(reason) && /baseUrl/.test(reason);
       return {
         ok: r.status !== "passed" && blocked,
         observed: blocked
-          ? `blocked by the boundary: ${reason.slice(0, 70)}`
-          : `NOT blocked — status ${r.status}, reason ${reason.slice(0, 70)}`,
+          ? `refused at the manifest, before run(): ${reason.slice(0, 80)}`
+          : `NOT blocked — status ${r.status}, reason ${reason.slice(0, 80)}`,
       };
     },
   },
