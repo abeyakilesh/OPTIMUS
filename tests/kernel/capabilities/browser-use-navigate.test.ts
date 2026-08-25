@@ -106,16 +106,18 @@ describe.skipIf(!environment.ready)(
         // through real Chrome and real CDP, not a stub.
         expect(output.text).toContain("Product Listing");
         expect(output.text).toContain("$42.00");
-        // `title` is NOT asserted here on purpose: `get_current_page_title()`
-        // reads CDP's cached `target.title` (session.py), which for a bare
-        // static page served with no further navigation trigger was
-        // observed — reproducibly, across 5 polls over 1.5s — to still read
-        // as the URL rather than the parsed <title>. Confirmed this is not a
-        // timing race, and not specific to this test's fixture. Real
-        // upstream nuance, not a bug in this capability; asserting an exact
-        // title here would make the test flaky against something the
-        // capability doesn't control. `text` is the reliable signal.
-        expect(typeof output.title).toBe("string");
+        // The real <title>, asserted for real.
+        //
+        // This used to be `expect(typeof output.title).toBe("string")`, with a
+        // careful comment explaining that get_current_page_title() returns the
+        // URL and calling it "real upstream nuance, not a bug in this
+        // capability." The diagnosis was right and the conclusion was wrong:
+        // this capability's own contract promises `title` means a page title,
+        // so shipping a URL there is OUR defect regardless of whose code
+        // produces it. A type-only assertion passes on any string — including
+        // the wrong one — which is how it survived gate 11 since absorption.
+        // bridge.py now reads document.title over CDP Runtime.evaluate.
+        expect(output.title).toBe("OPTIMUS bridge fixture");
 
         // Evidence carries a real artifact, same as every other capability.
         expect(outcome.evidence.artifactIds).toHaveLength(1);

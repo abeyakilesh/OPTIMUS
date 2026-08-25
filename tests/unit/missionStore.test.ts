@@ -33,6 +33,7 @@ function fakeLog(spec: MissionSpec, status: "green" | "red", startedAt: number):
       durationMs: 5,
       cost: 1,
       artifactIds: [],
+      producedArtifactIds: [],
       checks: [],
       inputHash: "x",
     },
