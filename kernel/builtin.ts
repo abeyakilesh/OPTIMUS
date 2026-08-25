@@ -23,6 +23,11 @@ export const webFetch: Capability = {
     // a named host, not a blanket excuse. The injected fetcher (HarnessDeps
     // .fetcher) never sees a URL this list rejects.
     isolation: { allowedHosts: ["example.com"] },
+    inputConstraints: {
+      // Same host list as isolation.allowedHosts above, checked one layer
+      // earlier: this refuses the value, that refuses the socket.
+      url: { kind: "url", required: true, allowedSchemes: ["http", "https"], allowedHosts: ["example.com"] },
+    },
     defaultBudget: { maxAttempts: 3, maxWallTimeMs: 30 * ONE_SECOND, maxCost: 10 },
     description: "Fetch a URL and store the response body as an artifact.",
   },
@@ -46,6 +51,11 @@ export const htmlExtractTitle: Capability = {
     id: "html.extractTitle",
     version: "1.0.0",
     permissions: [],
+    inputConstraints: {
+      // A content address, and shaped like one: `sha256:` + 64 hex is 71
+      // characters exactly, so the bounds are the real format, not a guess.
+      artifactId: { kind: "string", required: true, minLength: 71, maxLength: 71 },
+    },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 5 * ONE_SECOND, maxCost: 5 },
     description: "Extract the <title> text from a stored HTML artifact.",
   },

@@ -44,6 +44,29 @@ export const scraplingRelocate: Capability = {
     // An empty radius is the honest declaration, not a placeholder — and
     // because it holds no permissions, the broker's radius check is vacuous.
     isolation: {},
+    inputConstraints: {
+      // A fingerprint is a captured DOM element, so its shape is the parent
+      // repo's, not ours — mirrored field for field rather than waved through
+      // as an object, because "we did not write this shape" is a reason to
+      // pin it down, not a reason to skip it.
+      fingerprint: {
+        kind: "object",
+        required: true,
+        fields: {
+          tag: { kind: "string", required: true, maxLength: 100 },
+          attributes: { kind: "record", required: true, values: { kind: "string", maxLength: 100_000 }, maxEntries: 500 },
+          text: { kind: "string", required: true, nullable: true, maxLength: 1_000_000 },
+          path: { kind: "array", required: true, of: { kind: "string", maxLength: 100 }, maxLength: 500 },
+          parentName: { kind: "string", maxLength: 100 },
+          parentAttribs: { kind: "record", values: { kind: "string", maxLength: 100_000 }, maxEntries: 500 },
+          parentText: { kind: "string", nullable: true, maxLength: 1_000_000 },
+          siblings: { kind: "array", of: { kind: "string", maxLength: 100 }, maxLength: 5_000 },
+          children: { kind: "array", of: { kind: "string", maxLength: 100 }, maxLength: 5_000 },
+        },
+      },
+      pageHtml: { kind: "string", required: true, maxLength: 50_000_000 },
+      percentage: { kind: "number", min: 0, max: 100 },
+    },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 5000, maxCost: 5 },
     description:
       "Finds the element matching a saved fingerprint on a page, surviving " +

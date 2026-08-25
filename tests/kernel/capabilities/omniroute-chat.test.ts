@@ -151,7 +151,15 @@ describe("llm.chatSucceeded — check logic, isolated from real network calls", 
   async function runFakeCapability(fakeOutput: unknown) {
     const broker = checkOnly();
     const fake: Capability = {
-      manifest: { ...llmChat.manifest, id: "llm.chat.fake" },
+      manifest: {
+        ...llmChat.manifest,
+        id: "llm.chat.fake",
+        // A stub that ignores input entirely, so it declares the honest
+        // contract for THAT — not the real capability's. Inheriting the
+        // real one would make this fake fail at the manifest door and
+        // never reach the check these tests exist to exercise.
+        inputConstraints: {},
+      },
       async run() {
         return fakeOutput;
       },

@@ -1,6 +1,6 @@
 # Validation Round 1 — repos 1–3
 
-Run 2026-08-25T05:35:05.679Z against the real kernel. **30/30 scenarios passed.**
+Run 2026-08-25T07:29:22.142Z against the real kernel. **30/30 scenarios passed.**
 
 Scores measure whether gates passed. A validation round measures something
 harder to fake: whether the capability does the thing, on real input, with
@@ -10,46 +10,46 @@ output a person reads.
 
 | | Scenario | What it checks | Observed | ms |
 |---|---|---|---|---|
-| ✅ | `identical-page` | Finds the element on an unchanged page | found, score 100.0 (threshold 40), 1 match(es) | 5 |
+| ✅ | `identical-page` | Finds the element on an unchanged page | found, score 100.0 (threshold 40), 1 match(es) | 4 |
 | ✅ | `class-renamed` | Survives a CSS class rename (buy-now → cta-primary) | found, score 87.3 (threshold 40), 1 match(es) | 1 |
 | ✅ | `tag-changed` | Survives the wrapper changing from div to section | found, score 88.9 (threshold 40), 1 match(es) | 1 |
-| ✅ | `moved-deeper` | Survives being wrapped in two new layout divs | found, score 79.6 (threshold 40), 1 match(es) | 2 |
+| ✅ | `moved-deeper` | Survives being wrapped in two new layout divs | found, score 79.6 (threshold 40), 1 match(es) | 1 |
 | ✅ | `siblings-added` | Survives new sibling elements appearing alongside it | found, score 96.3 (threshold 40), 1 match(es) | 1 |
-| ✅ | `attributes-changed` | Survives added data/aria attributes | found, score 95.2 (threshold 40), 1 match(es) | 2 |
-| ✅ | `text-reworded` | Survives the button label being reworded | found, score 97.2 (threshold 40), 1 match(es) | 2 |
-| ✅ | `full-redesign` | Survives a combined redesign — tag, classes, nesting and text all change at once | found, score 59.6 (threshold 40), 1 match(es) | 1 |
-| ✅ | `element-removed` | Says NOT FOUND when the element is genuinely gone — no hallucinated match | correctly reported not-found (score 0.0 < 40) | 0 |
+| ✅ | `attributes-changed` | Survives added data/aria attributes | found, score 95.2 (threshold 40), 1 match(es) | 1 |
+| ✅ | `text-reworded` | Survives the button label being reworded | found, score 97.2 (threshold 40), 1 match(es) | 1 |
+| ✅ | `full-redesign` | Survives a combined redesign — tag, classes, nesting and text all change at once | found, score 59.6 (threshold 40), 1 match(es) | 0 |
+| ✅ | `element-removed` | Says NOT FOUND when the element is genuinely gone — no hallucinated match | correctly reported not-found (score 0.0 < 40) | 1 |
 | ✅ | `empty-page` | Handles an empty document without crashing, and reports not-found | correctly reported not-found (score 0.0 < 40) | 0 |
 
 ## `llm.chat` — 10/10
 
 | | Scenario | What it checks | Observed | ms |
 |---|---|---|---|---|
-| ✅ | `simple-reply` | Answers a plain question with real text from the local model | "ONLINE" · 35 tokens | 1439 |
-| ✅ | `checkable-arithmetic` | 17 × 24 — an answer a person can verify is 408 | correct: "408" | 1306 |
-| ✅ | `multi-turn-context` | Carries context across turns — recalls a name given earlier | recalled: "Optimus" | 1108 |
-| ✅ | `system-prompt-obeyed` | Honours a system instruction rather than ignoring it | 1 word(s): "Blue" | 942 |
-| ✅ | `evidence-has-real-usage` | Evidence carries real token counts, not placeholders | prompt 28 + completion 25 = 53 | 4452 |
-| ✅ | `artifact-persisted` | The raw upstream response is stored as a retrievable artifact | artifact sha256:22b08d52733ea0a98… referenced in evidence | 2094 |
-| ✅ | `sandbox-blocks-remote-host` | K4 refuses a non-loopback baseUrl — the model layer is local-only by design | blocked by the boundary: Sandbox violation: llm.chat may only reach 127.0.0.1, localhost, [::1] | 0 |
-| ✅ | `unknown-model-fails-honestly` | A model that does not exist produces an error, never a fabricated reply | refused honestly: chat completion did not succeed: All credentials for model this-model-does-not-e | 36 |
+| ✅ | `simple-reply` | Answers a plain question with real text from the local model | "ONLINE" · 35 tokens | 759 |
+| ✅ | `checkable-arithmetic` | 17 × 24 — an answer a person can verify is 408 | correct: "408" | 617 |
+| ✅ | `multi-turn-context` | Carries context across turns — recalls a name given earlier | recalled: "Optimus" | 590 |
+| ✅ | `system-prompt-obeyed` | Honours a system instruction rather than ignoring it | 1 word(s): "Blue" | 510 |
+| ✅ | `evidence-has-real-usage` | Evidence carries real token counts, not placeholders | prompt 28 + completion 25 = 53 | 2249 |
+| ✅ | `artifact-persisted` | The raw upstream response is stored as a retrievable artifact | artifact sha256:d7c847ddb4e6f94a0… referenced in evidence | 2479 |
+| ✅ | `remote-host-refused-at-the-contract` | A non-loopback baseUrl is refused before the capability sees it — the model layer is local-only by design | refused at the manifest, before run(): llm.chat: input refused — input.baseUrl: scheme "https" is not one of ["http"];  | 1 |
+| ✅ | `unknown-model-fails-honestly` | A model that does not exist produces an error, never a fabricated reply | refused honestly: chat completion did not succeed: [openai-compatible-chat-2abc1ff0-2c34-4f60-8703 | 76 |
 | ✅ | `unreachable-port-fails-honestly` | A dead model layer is reported as unavailable, not answered around | refused honestly: fetch failed | 1 |
-| ✅ | `empty-message-rejected` | Refuses an empty prompt at the contract, before spending a model call | refused honestly: llm.chat requires { model: string, messages: LlmChatMessage[] } | 0 |
+| ✅ | `empty-message-rejected` | Refuses an empty prompt at the contract, before spending a model call | refused honestly: llm.chat: input refused — input.messages: has 0 items, minLength is 1 | 0 |
 
 ## `browser.navigate` — 10/10
 
 | | Scenario | What it checks | Observed | ms |
 |---|---|---|---|---|
-| ✅ | `static-page` | Navigates a real browser to a page and extracts its real title and text | "Static Fixture Page" · 53 chars · found "Revenue rose" | 4660 |
-| ✅ | `javascript-rendered` | Runs JavaScript — this text exists nowhere in the served HTML | "Rendered By JavaScript" · 25 chars · found "MARKER_ONLY_AFTER_JS_RUNS" | 4521 |
-| ✅ | `title-set-by-script` | Reads a title that only a script sets, proving it is not parsing raw HTML | "Rendered By JavaScript" · 25 chars · found "Rendered By JavaScript" | 4410 |
-| ✅ | `follows-redirect` | Follows a 302 and reports the destination's content | "Static Fixture Page" · 53 chars · found "Quarterly Report" | 4586 |
-| ✅ | `renders-404-body` | A 404 page still renders — the content is real, the status is not the point | "404 Not Found" · 55 chars · found "No such page" | 4508 |
-| ✅ | `deeply-nested-text` | Extracts text buried seven elements deep | "Deeply Nested" · 20 chars · found "BURIED_TREASURE_TEXT" | 4515 |
-| ✅ | `evidence-is-real` | Evidence carries a real artifact and a real duration, not placeholders | artifact sha256:c52b0a4b8a466… · 4547ms · 1 attempt(s) | 4547 |
-| ✅ | `connection-refused` | A dead server is reported honestly, not answered around | refused for the right reason: navigation did not succeed: RuntimeError: Navigation failed: net::ERR_ | 4433 |
-| ✅ | `malformed-url` | A nonsense URL fails with a reason instead of hanging | refused for the right reason: navigation did not succeed: RuntimeError: {'code': -32000, 'message':  | 4374 |
-| ✅ | `missing-chrome-path` | Refuses at the contract when no browser binary is supplied | refused for the right reason: browser.navigate requires { url, chromeExecutablePath } | 1 |
+| ✅ | `static-page` | Navigates a real browser to a page and extracts its real title and text | "Static Fixture Page" · 53 chars · found "Revenue rose" | 3516 |
+| ✅ | `javascript-rendered` | Runs JavaScript — this text exists nowhere in the served HTML | "Rendered By JavaScript" · 25 chars · found "MARKER_ONLY_AFTER_JS_RUNS" | 3091 |
+| ✅ | `title-set-by-script` | Reads a title that only a script sets, proving it is not parsing raw HTML | "Rendered By JavaScript" · 25 chars · found "Rendered By JavaScript" | 3043 |
+| ✅ | `follows-redirect` | Follows a 302 and reports the destination's content | "Static Fixture Page" · 53 chars · found "Quarterly Report" | 3005 |
+| ✅ | `renders-404-body` | A 404 page still renders — the content is real, the status is not the point | "404 Not Found" · 55 chars · found "No such page" | 3049 |
+| ✅ | `deeply-nested-text` | Extracts text buried seven elements deep | "Deeply Nested" · 20 chars · found "BURIED_TREASURE_TEXT" | 3192 |
+| ✅ | `evidence-is-real` | Evidence carries a real artifact and a real duration, not placeholders | artifact sha256:22de6cc0359c8… · 3033ms · 1 attempt(s) | 3033 |
+| ✅ | `connection-refused` | A dead server is reported honestly, not answered around | refused for the right reason: navigation did not succeed: RuntimeError: Navigation failed: net::ERR_ | 3103 |
+| ✅ | `malformed-url` | A nonsense URL fails with a reason instead of hanging | refused for the right reason: browser.navigate: input refused — input.url: "not-a-real-url-at-all" i | 0 |
+| ✅ | `missing-chrome-path` | Refuses at the manifest when no browser binary is supplied, before run() is reached | refused for the right reason: browser.navigate: input refused — input.chromeExecutablePath: required | 1 |
 
 ## Notes
 

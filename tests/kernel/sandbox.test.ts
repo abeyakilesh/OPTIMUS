@@ -36,6 +36,7 @@ function cap(id: string, permissions: string[], isolation?: Isolation): Capabili
       version: "1.0.0",
       permissions: permissions as never,
       isolation,
+      inputConstraints: {}, // takes no input; {} means "must be empty", not "anything goes"
       defaultBudget: { maxAttempts: 1, maxWallTimeMs: 1000, maxCost: 1 },
       description: "fixture",
     },

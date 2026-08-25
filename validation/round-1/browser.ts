@@ -212,10 +212,14 @@ export function browserScenarios(): Scenario[] {
     },
     {
       id: "missing-chrome-path",
-      intent: "Refuses at the contract when no browser binary is supplied",
+      // The refusal moved from a hand-written guard inside run() to the
+      // manifest itself, so it now happens before the capability is invoked
+      // at all. Same rejection, one layer earlier, and declared rather than
+      // coded — which is the point of gate 8's input contract.
+      intent: "Refuses at the manifest when no browser binary is supplied, before run() is reached",
       input: { url: `${base}/static`, pythonExecutable: VENV_PYTHON, headless: true },
       checks: CHECKS,
-      verdict: failsWith(/requires \{ url, chromeExecutablePath \}/i),
+      verdict: failsWith(/input refused .*chromeExecutablePath: required field is missing/i),
     },
   ];
 }

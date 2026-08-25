@@ -26,6 +26,7 @@ const repeater: Capability = {
     version: "1.0.0",
     permissions: [],
     isolation: {},
+    inputConstraints: {},
     defaultBudget: { maxAttempts: 1, maxWallTimeMs: 2_000, maxCost: 5 },
     description: "stores a constant body and returns its artifact id",
   },
