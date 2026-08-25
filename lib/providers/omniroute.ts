@@ -35,7 +35,19 @@ export interface OmniRouteStatus {
   baseUrl: string;
   /** Separate from `reachable`: it can be up but refuse an unauthenticated call. */
   authenticated: boolean;
-  modelCount: number | null;
+  /**
+   * How many models the gateway ADVERTISES. Deliberately not called
+   * "routable": OmniRoute lists every provider it knows how to talk to,
+   * whether or not a connection exists. Measured here — 286 advertised, and
+   * exactly ONE answered a real request:
+   *   auto/best-fast          → 429/502/401/400 across its free backends
+   *   dva/gpt-4o              → 400 "not present in the current Devin catalog"
+   *   ollama/llama3.2:latest  → 200, a real completion
+   * A catalogue is a claim about capability; only a request is evidence of it.
+   */
+  advertisedModelCount: number | null;
+  /** Connections actually configured — the number that constrains routing. */
+  connectionCount: number | null;
   /** A handful, for display. Not the whole 286. */
   sampleModels: string[];
   usage: OmniRouteUsage | null;
@@ -51,7 +63,8 @@ export async function probeOmniRoute(): Promise<OmniRouteStatus> {
     reachable: false,
     baseUrl: BASE,
     authenticated: false,
-    modelCount: null,
+    advertisedModelCount: null,
+    connectionCount: null,
     sampleModels: [],
     usage: null,
     usageNote: null,
@@ -100,13 +113,47 @@ export async function probeOmniRoute(): Promise<OmniRouteStatus> {
     const authed: OmniRouteStatus = {
       ...withPing,
       authenticated: true,
-      modelCount: models.length,
+      advertisedModelCount: models.length,
       sampleModels: models.slice(0, 6),
     };
-    return { ...authed, ...(await usageFor(authed)) };
+    return { ...authed, ...(await usageFor(authed)), connectionCount: await connectionCount() };
   } catch (error) {
     return { ...withPing, error: error instanceof Error ? error.message : "model catalogue request failed" };
   }
+}
+
+/**
+ * How many provider connections actually exist. Needs the same dashboard
+ * session as usage, and is the honest counterpart to the advertised count:
+ * models can only be reached through a configured connection.
+ */
+async function connectionCount(): Promise<number | null> {
+  const password = process.env.OMNIROUTE_PASSWORD?.trim();
+  if (!password) return null;
+  try {
+    const cookie = await dashboardCookie(password);
+    if (!cookie) return null;
+    const res = await fetch(`${BASE}/api/providers`, {
+      headers: { Cookie: cookie },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const { connections } = (await res.json()) as { connections?: unknown[] };
+    return Array.isArray(connections) ? connections.filter((c) => (c as { isActive?: boolean }).isActive !== false).length : null;
+  } catch {
+    return null;
+  }
+}
+
+async function dashboardCookie(password: string): Promise<string | null> {
+  const login = await fetch(`${BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!login.ok) return null;
+  return login.headers.getSetCookie?.().join("; ") ?? login.headers.get("set-cookie") ?? "";
 }
 
 /**
@@ -124,15 +171,9 @@ async function usageFor(status: OmniRouteStatus): Promise<Pick<OmniRouteStatus, 
     };
   }
   try {
-    const login = await fetch(`${status.baseUrl}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (!login.ok) return { usage: null, usageNote: `OmniRoute rejected OMNIROUTE_PASSWORD (HTTP ${login.status})` };
+    const cookie = await dashboardCookie(password);
+    if (cookie === null) return { usage: null, usageNote: "OmniRoute rejected OMNIROUTE_PASSWORD" };
 
-    const cookie = login.headers.getSetCookie?.().join("; ") ?? login.headers.get("set-cookie") ?? "";
     const res = await fetch(`${status.baseUrl}/api/usage/analytics`, {
       headers: { Cookie: cookie },
       signal: AbortSignal.timeout(TIMEOUT_MS),
