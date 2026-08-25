@@ -76,7 +76,50 @@ jobs:
           HOST: 127.0.0.1
           PORT: "20128"
         run: |
-          npm i -g omniroute
+          # `npm i -g omniroute` pulls ~1,200 packages (tfjs, transformers,
+          # aws-sdk). It is the heaviest single step in the gauntlet and it
+          # fails transiently. Two problems were fixed here after it blocked
+          # every PR for an afternoon:
+          #
+          #   1. The step runs under `bash -e`, so a failed install aborted
+          #      immediately and the ONLY surviving line was a pointer to an
+          #      npm debug log on a runner that no longer exists. The job then
+          #      reported "OmniRoute did not become healthy in 60s", which was
+          #      false — it never reached the health loop at all. A failure
+          #      that misreports its own cause is the same defect as a green
+          #      check on nothing.
+          #   2. No retry on a large network fetch.
+          # Redirect to a file rather than `| tee`: under a pipeline the exit
+          # status is tee's, not npm's, so the first version of this retry
+          # `break`ed on a FAILED install and then tried to run a binary that
+          # was never installed ("nohup: failed to run command 'omniroute'").
+          # The retry loop reported success while installing nothing.
+          for attempt in 1 2 3; do
+            echo "npm i -g omniroute (attempt ${attempt}/3)"
+            if npm i -g omniroute --no-fund --no-audit > /tmp/npm-omniroute.log 2>&1; then
+              echo "installed on attempt ${attempt}"
+              break
+            fi
+            echo "----- npm console output -----"
+            cat /tmp/npm-omniroute.log || true
+            # npm prints only a POINTER to its debug log on the console, so the
+            # actual cause lives in a file on a runner that is about to be
+            # destroyed. Print it, or every future failure is undiagnosable.
+            echo "----- npm debug log -----"
+            for f in /home/runner/.npm/_logs/*-debug-*.log; do
+              [ -e "$f" ] && { echo "== $f"; tail -60 "$f"; }
+            done
+            if [ "${attempt}" = "3" ]; then
+              echo "::error title=Gate 4::npm could not install omniroute after 3 attempts. This is an INSTALL failure, not a gateway health failure — the cause is printed above."
+              exit 1
+            fi
+            echo "retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          done
+          command -v omniroute >/dev/null || {
+            echo "::error title=Gate 4::npm reported success but the omniroute binary is not on PATH."
+            exit 1
+          }
           nohup omniroute > /tmp/omniroute.log 2>&1 &
           # Health-gate the startup rather than sleeping a fixed amount.
           for i in $(seq 1 60); do

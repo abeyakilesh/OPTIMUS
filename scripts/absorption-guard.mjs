@@ -9,7 +9,7 @@
  *   Directive 1  · one repo per PR — no bulk absorption waves
  *   Directive 4  · never present a capability that isn't wired
  *   Directive 6  · an honest Absorption Score, with its breakdown
- *   Scoring      · AVAILABLE requires >=90/100, Fidelity >=30/35, Safety ==25/25
+ *   Scoring      · AVAILABLE requires >=90/100, Fidelity >=30/35, Safety ==30/30
  *   Gauntlet     · nobody silently weakens the pipeline to get a PR through
  *
  * Exits non-zero on violation. Advisory notices use ::warning so they surface
@@ -67,11 +67,25 @@ if (ciTouched.length > 0) {
   }
 }
 
+// `kernel/capabilities/`, not `capabilities/`. The original prefix matched
+// nothing in this repo, so BOTH the absorption detection below and the
+// one-repo-per-PR check were dead from the first commit — a guard that could
+// not fire, printing "Absorption rules satisfied."
+//
+// Declared HERE, above its first use. It was originally declared in section 3
+// and read in section 2, which is a TDZ ReferenceError the moment `changed` is
+// non-empty. Local tests missed it because they left BASE_SHA/HEAD_SHA unset,
+// so `changed` was always [] and `.some()` never ran the callback.
+const CAP_PREFIX = "kernel/capabilities/";
+
 /* ── 2 · is this an absorption PR? ────────────────────────────────────── */
 const isAbsorption =
-  /^absorb[:(]/i.test(title) ||
+  // `absorb/scrapling: ...` is this repo's actual convention and the original
+  // `^absorb[:(]` did not match it, leaving the body's Fate line as the ONLY
+  // working detector. Omit that line and every score check skipped silently.
+  /^absorb[:/(]/i.test(title) ||
   /\*\*Fate:\*\*\s*(PORT|BUNDLE|HARVEST)/i.test(body) ||
-  changed.some((f) => f.startsWith("capabilities/"));
+  changed.some((f) => f.startsWith(CAP_PREFIX));
 
 if (!isAbsorption) {
   console.log("Not an absorption PR — checked gauntlet integrity only.");
@@ -81,8 +95,11 @@ if (!isAbsorption) {
 /* ── 3 · one repo per PR ──────────────────────────────────────────────── */
 const capDirs = new Set(
   changed
-    .filter((f) => f.startsWith("capabilities/"))
-    .map((f) => f.split("/")[1])
+    .filter((f) => f.startsWith(CAP_PREFIX))
+    // A capability is either a directory (omniroute/chat.ts) or a single file
+    // (scrapling-relocate.ts); both are one capability, so drop the extension
+    // and treat the segment as its name.
+    .map((f) => f.slice(CAP_PREFIX.length).split("/")[0].replace(/\.[^.]+$/, ""))
     .filter(Boolean),
 );
 if (capDirs.size > 1) {
@@ -109,9 +126,12 @@ if (!total) {
   };
   const parts = {
     Fidelity: grab("Fidelity", 35),
-    Safety: grab("Safety", 25),
+    // Safety 30 and Integration 10 since #40: gate 8's input contract moved
+    // from Integration ("is it declared") to Safety ("does it hold"). A
+    // relocation, not an addition — the total is still 100.
+    Safety: grab("Safety", 30),
     Robustness: grab("Robustness", 15),
-    Integration: grab("Integration", 15),
+    Integration: grab("Integration", 10),
     "Proof coverage": grab("Proof coverage", 10),
   };
 
@@ -134,11 +154,12 @@ if (!total) {
     if (claimsAvailable) {
       if (score < 90) errors.push(`Claims AVAILABLE at ${score}/100. Requires >=90.`);
       if (parts.Fidelity < 30) errors.push(`Claims AVAILABLE with Fidelity ${parts.Fidelity}/35. Requires >=30.`);
-      if (parts.Safety !== 25) {
+      if (parts.Safety !== 30) {
         errors.push(
-          `Claims AVAILABLE with Safety ${parts.Safety}/25. Safety is never ` +
-            "partial credit — either all five guarantees are wired and tested, " +
-            "or the capability stays UNAVAILABLE (Directive 4).",
+          `Claims AVAILABLE with Safety ${parts.Safety}/30. Safety is never ` +
+            "partial credit — either all six boundaries are wired and tested " +
+            "(permission, sandbox, input, verify, log, rollback), or the " +
+            "capability stays UNAVAILABLE (Directive 4).",
         );
       }
     }
