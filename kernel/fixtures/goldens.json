@@ -1,0 +1,40 @@
+{
+  "$comment": "Provenance for gate 11 (issue #34). sha256 fields are checked by scripts/fidelity-check.mjs on every PR. Regenerating a golden is a deliberate act: rerun its generator, then update the hash here in the same commit.",
+  "capabilities": [
+    "scrapling.relocate",
+    "llm.chat",
+    "browser.navigate"
+  ],
+  "goldens": [
+    {
+      "id": "sequence-matcher",
+      "file": "kernel/fixtures/sequence-matcher-golden.json",
+      "covers": [
+        "scrapling.relocate"
+      ],
+      "parent": "CPython difflib.SequenceMatcher",
+      "parentVersion": "3.13.5",
+      "generator": "kernel/fixtures/generate_sequence_matcher_golden.py",
+      "consumedBy": "tests/kernel/sequence-matcher.test.ts",
+      "reproducibleInCI": true,
+      "sha256": "cc8ad70cefa745ae4ac153e9fe2b7f230e07a511d1c761f79d6a25b8aeef00ce",
+      "generatorSha256": "6e6a2ff01bd8e45d7b8c16bf2dc4b5fbf9facc84626e5452d4428ad77ec0a16b"
+    },
+    {
+      "id": "scrapling-similarity",
+      "file": "kernel/fixtures/scrapling-golden.json",
+      "covers": [
+        "scrapling.relocate"
+      ],
+      "parent": "Scrapling Selector.__calculate_similarity_score + _StorageTools.element_to_dict",
+      "parentVersion": "0.4.9",
+      "generator": "kernel/fixtures/generate_golden.py",
+      "consumedBy": "tests/kernel/scrapling.test.ts",
+      "reproducibleInCI": false,
+      "notReproducibleReason": "needs scrapling + lxml installed; CI does not carry them, so the parent cannot be re-run here. Integrity-pinned only \u2014 this half of gate 11 is UNENFORCED for this golden.",
+      "regenerateWith": "cd ../Scrapling-main && python3 <OPTIMUS>/kernel/fixtures/generate_golden.py > <OPTIMUS>/kernel/fixtures/scrapling-golden.json",
+      "sha256": "cce3e999bd5ea103c4b69e8c151e5cdc9fa49f8775d0eae32ce057d8e6283844",
+      "generatorSha256": "829ee48eb95e396e4ef10a482f888e37d37d043d516c205c88c13501489eb5ad"
+    }
+  ]
+}

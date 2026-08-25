@@ -1,0 +1,34 @@
+# Reusable · GATE 11 — fidelity vs parent.
+#
+# Its own job, not a slice of the unit suite, and that distinction is the whole
+# point of issue #34. A fidelity assertion living inside `vitest run` can only
+# fail when OUR code changes. This job additionally pins each golden's
+# provenance and, where the parent is available here, RE-RUNS THE PARENT and
+# diffs — the only check that can fail on the parent moving.
+#
+# Python is stdlib-only on purpose: the one parent CI can re-run is CPython's
+# own difflib, which needs no install. Scrapling's parent needs lxml + scrapling
+# and is integrity-pinned only; the harness prints which is which on every run
+# rather than reporting a single averaged number.
+name: "gate:fidelity"
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  fidelity:
+    name: gate 11 · fidelity vs parent
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Golden provenance + re-derive from parent
+        run: node scripts/fidelity-check.mjs
+      - name: The fidelity suites that consume those goldens
+        run: npx vitest run tests/kernel/scrapling.test.ts tests/kernel/sequence-matcher.test.ts --reporter=verbose
