@@ -112,6 +112,13 @@ export interface Evidence {
   checks: CheckResult[];
   /** Hash of the step's resolved inputs — drives memoisation. */
   inputHash: string;
+  /**
+   * True when the step failed AND the kernel actually restored its declared
+   * radius (K2b). Absent means no rollback was needed or none was in scope.
+   * Recorded because a rollback nobody can see is indistinguishable from one
+   * that never ran.
+   */
+  rolledBack?: boolean;
 }
 
 /** A node in the mission DAG. One tool, one loop, one budget. */

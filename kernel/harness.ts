@@ -27,6 +27,7 @@ import type { Broker } from "./broker";
 import type { ArtifactStore } from "./artifacts";
 import { hashInput } from "./artifacts";
 import { createContext, type Fetcher } from "./permissions";
+import { rollbackScope, snapshotTree, restoreTree } from "./rollback";
 
 export interface HarnessDeps {
   broker: Broker;
@@ -64,7 +65,32 @@ export class Harness {
     return this.deps.now ?? Date.now;
   }
 
+  /**
+   * K2b, wired. A step that fails must not leave its half-finished work on
+   * disk — CLAUDE.md: "revert a merge, including the parts that succeeded."
+   *
+   * The scope comes from the capability's OWN manifest (K4's writeRoots and
+   * cwd), which is why this could not exist before the isolation boundary
+   * did: `snapshot()`'s explicit watched-files list required the caller to
+   * already know what a capability was about to touch. Nothing ever knew.
+   *
+   * Scope note, so it is not mistaken for more than it is: this restores
+   * between STEPS, not between attempts inside one step's repair loop. A
+   * retry currently starts from whatever the previous attempt left behind.
+   */
   async runStep(spec: StepSpec, repair?: Repair): Promise<StepOutcome> {
+    const roots = rollbackScope(this.deps.broker.capability(spec.capabilityId).manifest.isolation);
+    const before = roots.length > 0 ? await snapshotTree(roots) : undefined;
+
+    const outcome = await this.runStepUnprotected(spec, repair);
+
+    if (before && outcome.status !== "passed") {
+      outcome.evidence.rolledBack = await restoreTree(before);
+    }
+    return outcome;
+  }
+
+  private async runStepUnprotected(spec: StepSpec, repair?: Repair): Promise<StepOutcome> {
     const { broker, store, fetcher } = this.deps;
     const capability = broker.capability(spec.capabilityId);
     const manifest = capability.manifest;
