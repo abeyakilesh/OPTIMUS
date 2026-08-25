@@ -13,11 +13,11 @@
  * "verification actually blocks" to be *visible*, not merely asserted.
  */
 
-import { Broker } from "./broker";
+import { buildBroker } from "./registry";
 import { Harness } from "./harness";
 import { Scheduler } from "./scheduler";
 import { MemoryArtifactStore, addressOf } from "./artifacts";
-import { webFetch, htmlExtractTitle, titleNonEmpty, artifactExists } from "./builtin";
+import { htmlExtractTitle } from "./builtin";
 import type { Capability, MissionSpec } from "./types";
 
 const FIXTURE_HTML = `<!doctype html>
@@ -41,11 +41,9 @@ const sabotagedExtract: Capability = {
 async function main(): Promise<void> {
   const sabotage = process.argv.includes("fail");
 
-  const broker = new Broker();
-  broker.register(webFetch);
-  broker.register(sabotage ? sabotagedExtract : htmlExtractTitle);
-  broker.registerCheck(titleNonEmpty);
-  broker.registerCheck(artifactExists);
+  // One registry, shared with the API route. The sabotage demo replaces a
+  // capability rather than assembling a second, divergent broker.
+  const broker = buildBroker({ overrides: sabotage ? [sabotagedExtract] : [] });
 
   const store = new MemoryArtifactStore();
   const harness = new Harness({
