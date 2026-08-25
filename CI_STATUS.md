@@ -93,7 +93,7 @@ sanitized to valid identifiers; rule logic is unchanged.
 
 | # | Gate | Blocked on | Unblocks when |
 |---|---|---|---|
-| 6 | Fidelity vs parent | No golden-output diff harness — the 3 absorbed repos assert fidelity inside the unit suite, per capability, not as a CI gate | a diff harness exists that can fail a PR on drift |
+| 6 | Fidelity vs parent | **Partly.** `gate 11 · fidelity vs parent` is now its own required job (#34): every golden is provenance-pinned, and where CI has the parent it is **re-run and diffed**. That is **1 of 2 goldens** (CPython difflib); Scrapling's parent needs an install CI does not carry, so it is integrity-pinned only. **1 of 3 capabilities** has a golden at all — `llm.chat` and `browser.navigate` have none | every capability has a golden, and every golden is re-derived from its parent in CI |
 | 7 | Verification self-eval | `harbor` not integrated | K5 exists |
 | 9 | Scalability smoke | Nothing to load-test — static landing page | first real service surface |
 | 12 | Dynamic security | No deployed preview to attack | ephemeral previews (coolify) |
