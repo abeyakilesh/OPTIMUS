@@ -35,6 +35,12 @@ runs:
             - 'app/**'
             - 'components/**'
             - 'lib/**'
+            # The kernel IS the app. Omitting it meant a change to the broker,
+            # the harness or a capability skipped e2e and perf entirely: #36
+            # changed 9 kernel files including the harness's invocation path
+            # and e2e reported `skipping`. The suite passed when run by hand,
+            # which is the point — CI would not have said so either way.
+            - 'kernel/**'
             - 'public/**'
             - '*.ts'
             - '*.mjs'

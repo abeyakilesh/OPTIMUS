@@ -44,13 +44,28 @@ and `timeout-minutes` on every job.
 | # | Gate | Tool | Fails when | Verified? |
 |---|---|---|---|---|
 | 1 | Build · typecheck · lint | `next build`, `tsc --noEmit`, `eslint` | compile/type/lint error | ✅ runs clean locally |
-| 2 | Unit + contract | `vitest` | any test fails | ✅ 7 tests passing |
+| 2 | Unit + contract | `vitest` | any test fails | ✅ passing — the count lives in the job output, not here (see note below) |
 | 3 | Static security | `gitleaks` · `npm audit` · `ast-grep` · CodeQL | secret, high CVE, rule match | ✅ **proved it fires** — planted a weak RSA key, exit 1; clean tree, exit 0 |
 | 4 | AI security review | `claude-code-security-review` | finding on the diff, **or key unset** | ⚠️ needs `ANTHROPIC_API_KEY` |
 | 5 | Licenses + SBOM | `cyclonedx` + `scripts/license-gate.mjs` | AGPL/GPL/SSPL/BUSL/Elastic enters the tree | ✅ **proved it fires** — 5 scenarios, incl. LGPL-3.0 correctly *allowed* and `MIT OR GPL-3.0-or-later` correctly blocked |
 | 8 | Performance budgets | Lighthouse CI | a budget in `lighthouserc.json` regresses | ✅ **caught a real defect** — a11y was 0.92 vs the 0.95 budget; fixed to 1.00 |
-| 11 | End-to-end | Playwright | landing page smoke fails | ✅ 6 tests passing — first real run caught a test that had rotted against rewritten copy |
+| 11 | End-to-end | Playwright | landing page smoke fails, **or any kernel change breaks the real surface** | ✅ passing — first real run caught a test that had rotted against rewritten copy |
 | — | **Absorption guard** | `scripts/absorption-guard.mjs` | inflated score, missing breakdown, 2 repos in 1 PR, silently weakened gauntlet | ✅ **proved it fires** — 5 scenarios tested |
+
+### Why there are no test counts in that table
+
+There were: "7 tests passing" and "6 tests passing". By the time anyone read
+them they said 213 and 19. Nobody edited them wrong — they were right when
+written and rotted in place.
+
+This is the corollary in CLAUDE.md's SELF-DESCRIPTION RULE: single-sourcing
+stops two copies diverging from each other, and does nothing about the one
+remaining copy going stale against reality. Gate 6's blocker had gone stale the
+same way, inside this same file, and was found only because the gate list was
+being consolidated *into* it.
+
+A number that is recomputed on every run belongs where it is computed. The job
+output has it; this table says whether the gate is live.
 
 ## Correction: the rule count is 184, not 554
 
