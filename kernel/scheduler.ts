@@ -22,7 +22,13 @@ export class SchedulerError extends Error {}
 export interface SchedulerDeps {
   harness: Harness;
   now?: () => number;
-  /** Per-step repair strategies, keyed by step id or by agent name. */
+  /**
+   * Repair strategies, resolved most-specific first: step id, then agent
+   * name, then CAPABILITY id. The last is how a repair travels with the
+   * capability it understands — `scrapling.relocate` knows what to do about a
+   * missed relocation, and no caller should have to re-supply that knowledge
+   * at every call site. `kernel/registry.ts` exports ALL_REPAIRS for this.
+   */
   repairs?: Record<string, Repair>;
   /**
    * Memoised results from previous runs, keyed by input hash. A hit skips the
@@ -231,12 +237,15 @@ export class Scheduler {
     step: StepSpec,
     emit: (event: KernelEvent) => void,
   ): Promise<StepState["status"]> {
-    // A repair strategy may be registered for one specific step, or for a
-    // whole agent — so an agent can carry its own repair behaviour across
-    // every step it owns.
+    // A repair strategy may be registered for one specific step, for a whole
+    // agent — so an agent carries its repair behaviour across every step it
+    // owns — or for a capability, so the knowledge of how to recover from a
+    // given capability's failure lives with that capability. Most specific
+    // wins, so a step can always override.
     const repair =
       this.deps.repairs?.[step.id] ??
-      (step.agent ? this.deps.repairs?.[step.agent] : undefined);
+      (step.agent ? this.deps.repairs?.[step.agent] : undefined) ??
+      this.deps.repairs?.[step.capabilityId];
 
     const outcome = await this.deps.harness.runStep(step, repair);
     emit({

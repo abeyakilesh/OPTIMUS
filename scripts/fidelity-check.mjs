@@ -36,7 +36,6 @@ import { execFileSync } from "node:child_process";
 const MANIFEST = "kernel/fixtures/goldens.json";
 
 const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
-const canonical = (obj) => JSON.stringify(obj, Object.keys(obj).sort ? undefined : undefined, 2);
 
 const errors = [];
 const notes = [];

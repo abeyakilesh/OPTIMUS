@@ -27,8 +27,14 @@
 
 import { Broker } from "./broker";
 import type { Capability, Check } from "./types";
+import type { Repair } from "./harness";
 import { webFetch, htmlExtractTitle, titleNonEmpty, artifactExists } from "./builtin";
-import { scraplingRelocate, relocateContractHonored } from "./capabilities/scrapling-relocate";
+import {
+  scraplingRelocate,
+  relocateContractHonored,
+  relocateFoundMatch,
+  relocateRepair,
+} from "./capabilities/scrapling-relocate";
 import { llmChat, llmChatSucceeded } from "./capabilities/omniroute/chat";
 import { browserNavigate, browserNavigateSucceeded } from "./capabilities/browser-use/navigate";
 
@@ -53,9 +59,24 @@ export const ALL_CHECKS: readonly Check[] = [
   titleNonEmpty,
   artifactExists,
   relocateContractHonored,
+  relocateFoundMatch,
   llmChatSucceeded,
   browserNavigateSucceeded,
 ];
+
+/**
+ * Repairs keyed by CAPABILITY id. The scheduler falls back to these when no
+ * step- or agent-specific repair is registered, so a capability's recovery
+ * knowledge travels with it instead of being re-supplied at every call site.
+ *
+ * A capability with no entry simply has no repair: its steps fail on the first
+ * failed check rather than retrying. That is the honest default — a repair
+ * that does not understand its capability would just burn budget on identical
+ * attempts.
+ */
+export const ALL_REPAIRS: Readonly<Record<string, Repair>> = {
+  "scrapling.relocate": relocateRepair,
+};
 
 export interface BuildBrokerOptions {
   /**

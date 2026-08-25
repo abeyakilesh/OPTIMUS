@@ -10,7 +10,8 @@
  */
 
 import type { Capability, Check, CheckResult } from "../types";
-import { relocate, elementToDict, type ElementFingerprint } from "../scrapling";
+import type { Repair } from "../harness";
+import { bestMatch, elementToDict, type ElementFingerprint } from "../scrapling";
 
 export interface RelocateInput {
   fingerprint: ElementFingerprint;
@@ -78,12 +79,22 @@ export const scraplingRelocate: Capability = {
       throw new Error("scrapling.relocate requires { fingerprint, pageHtml }");
     }
 
-    const result = relocate(fingerprint, pageHtml, percentage);
+    // `score` reports the BEST candidate found, whether or not it cleared the
+    // threshold. It used to be `result?.score ?? 0`, which meant every missed
+    // relocation reported 0 — a sentinel dressed as a measurement. Two things
+    // broke because of it: an informed repair could not tell a near miss from
+    // nothing at all, and `relocateContractHonored`'s found=false branch
+    // (`score >= percentage` must not hold) could never fire, because 0 is
+    // below every threshold. A check that cannot fail is not a check.
+    const best = bestMatch(fingerprint, pageHtml);
+    const found = Boolean(best) && best!.score >= percentage;
     const output: Omit<RelocateOutput, "artifactId"> = {
-      found: Boolean(result),
-      score: result?.score ?? 0,
+      found,
+      score: best?.score ?? 0,
       percentage,
-      matches: (result?.matches ?? []).map((el) => elementToDict(el)),
+      // Matches are only returned when the threshold was actually met: a
+      // sub-threshold candidate is a diagnostic, not a result.
+      matches: found ? best!.matches.map((el) => elementToDict(el)) : [],
     };
 
     const artifactId = await ctx.putArtifact(JSON.stringify(output));
@@ -145,4 +156,144 @@ export const relocateContractHonored: Check = {
       detail: { found: result.found, score: result.score },
     };
   },
+};
+
+/**
+ * The floor a repair may never go below — set from MEASURED noise, not taste.
+ *
+ * The golden fixture's `unrelated-element` case scores **49.63**: a
+ * `<div class="price">$899</div>` fingerprint against
+ * `<a href="/about">About</a>` inside a nav. Different tag, different
+ * attributes, different text, unrelated content — and it clears 49.
+ *
+ * So any threshold at or below ~50 is inside the noise. A repair that relaxed
+ * to 35 because "the best candidate scored 35" would be handing back whatever
+ * element happened to sit closest, with a number that looks like evidence.
+ *
+ * ⚠️ This has a consequence larger than the repair, and it is filed rather
+ * than hidden here: **Scrapling's own default threshold is 40**, which is
+ * BELOW the noise floor this fixture demonstrates. `scrapling.relocate` at
+ * default settings can return an unrelated element and report it as found.
+ * That is a property of the parent algorithm, faithfully ported — see the
+ * calibration issue. The repair refuses to make it worse.
+ */
+export const MIN_PERCENTAGE = 50;
+
+/**
+ * The most a single repair may relax the caller's threshold. The floor alone
+ * is not enough: a caller who asked for 90 and gets handed a 51% match has had
+ * their question replaced, not answered. Bounded relaxation keeps the repair
+ * an adaptation rather than a redefinition.
+ *
+ * Together with the floor this means a caller sitting on the DEFAULT threshold
+ * gets no repair at all — 40 is already under the noise floor, so there is
+ * nothing safe to relax to, and the step fails honestly instead. The repair is
+ * for the caller who asked for 85 and got 72.
+ */
+export const MAX_RELAXATION = 15;
+
+/**
+ * Did the step achieve what the CALLER wanted — the element located?
+ *
+ * Deliberately separate from `relocate.contractHonored`, which asks a
+ * different question: did the capability tell the truth. Those come apart
+ * exactly where it matters. `found: false` with an honest score is a PASS for
+ * the contract (the capability reported accurately) and a FAIL here (the
+ * mission wanted the element). Without this check nothing ever fails on a
+ * missed relocation, so the repair loop below would never run — a repair
+ * attached to a step whose checks always pass is decoration.
+ */
+export const relocateFoundMatch: Check = {
+  id: "relocate.foundMatch",
+  async run(output): Promise<CheckResult> {
+    const r = output as Partial<RelocateOutput> | undefined;
+    if (!r || typeof r.found !== "boolean" || typeof r.score !== "number") {
+      return { checkId: "relocate.foundMatch", passed: false, reason: `malformed output: ${JSON.stringify(r)}` };
+    }
+    if (!r.found) {
+      return {
+        checkId: "relocate.foundMatch",
+        passed: false,
+        reason: `no element scored above ${r.percentage}; best candidate was ${r.score}`,
+        detail: { bestScore: r.score, threshold: r.percentage },
+      };
+    }
+    return {
+      checkId: "relocate.foundMatch",
+      passed: true,
+      // States the threshold ACTUALLY APPLIED, which is how a relaxed find
+      // stays visible: compare it against the percentage in the step's input.
+      reason: `located the element at score ${r.score} (threshold applied: ${r.percentage})`,
+      detail: { score: r.score, thresholdApplied: r.percentage },
+    };
+  },
+};
+
+/**
+ * The repair arc for a missed relocation — the one Scrapling's whole premise
+ * is about. A page changed, the saved fingerprint no longer scores above the
+ * caller's threshold, and the honest question is whether it *nearly* did.
+ *
+ * This is an INFORMED repair, not a retry. It reads the best score the last
+ * attempt actually achieved and lowers the threshold to exactly that, so the
+ * next attempt either succeeds or the element genuinely is not there. Blindly
+ * retrying the same input would burn the budget re-deriving the same number.
+ *
+ * WHAT IT REFUSES TO DO, and why each matters more than what it does:
+ *
+ *   · **It never repairs a contract violation.** If `relocate.contractHonored`
+ *     failed, the capability claimed a match below its own bar — our port
+ *     lying about its result. Lowering the threshold would make that lie
+ *     *true* and the check pass, converting a real defect into a green step.
+ *
+ *     ⚠️ **This branch is currently UNREACHABLE, and saying so is the point.**
+ *     Mutation-testing it (delete the branch, expect red) left all 12 tests
+ *     green. Working through why: a contract failure with `found: true` is
+ *     already stopped by the found-guard below; a contract failure with
+ *     `found: false` requires `score >= percentage`, which forces
+ *     `next >= current` and declines anyway. Every path is covered by another
+ *     guard, so this one is defence-in-depth, not the load-bearing check the
+ *     first draft of this comment claimed it was. It stays because the guards
+ *     below may change and this invariant must not depend on their order —
+ *     but it is not tested, because it cannot be, and an untested branch
+ *     described as critical is exactly the overclaim THE MUTATION RULE exists
+ *     to catch.
+ *   · **It never relaxes below MIN_PERCENTAGE**, where similarity is noise.
+ *   · **It never relaxes by more than MAX_RELAXATION** in one step, so a
+ *     caller's threshold is adapted, not discarded.
+ *   · **It never raises or repeats a threshold** — no progress means the loop
+ *     would spend the whole budget on identical attempts.
+ *
+ * The relaxation is visible rather than silent: the output echoes the
+ * `percentage` actually applied, `relocate.foundMatch` names it in its reason,
+ * and the step spec still records what the caller asked for. A reader
+ * comparing the two sees the adaptation. Nothing here can make a 35% match
+ * look like it cleared 40.
+ */
+export const relocateRepair: Repair = (previousInput, observation, checks) => {
+  const contract = checks.find((c) => c.checkId === "relocate.contractHonored");
+  if (contract && !contract.passed) return undefined;
+
+  if (!observation.ok) return undefined;
+
+  const out = observation.output as Partial<RelocateOutput> | undefined;
+  const input = previousInput as RelocateInput | undefined;
+  if (!out || !input || typeof out.score !== "number") return undefined;
+
+  // Already found: nothing to repair. A repair that fires on success would
+  // relax a threshold that was working.
+  if (out.found) return undefined;
+
+  const current = typeof input.percentage === "number" ? input.percentage : DEFAULT_PERCENTAGE;
+  const floor = Math.max(MIN_PERCENTAGE, current - MAX_RELAXATION);
+
+  // The best candidate cannot reach even the relaxed bar, so a retry would
+  // fail identically. Decline and let the step fail honestly with its
+  // evidence rather than burn another attempt.
+  if (out.score < floor) return undefined;
+
+  const next = Math.max(floor, out.score);
+  if (next >= current) return undefined;
+
+  return { ...input, percentage: next } satisfies RelocateInput;
 };
