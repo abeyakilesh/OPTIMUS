@@ -11,6 +11,7 @@
  */
 
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { Capability, Check, CheckResult } from "../../types";
 
@@ -57,9 +58,18 @@ export const browserNavigate: Capability = {
     version: "0.13.7-service", // pinned browser-use version, see requirements.txt
     permissions: ["proc:spawn", "net:read"],
     isolation: {
-      // The bridge runs in its own directory, not wherever OPTIMUS happens
-      // to be started from.
-      cwd: dirname(fileURLToPath(import.meta.url)),
+      // A dedicated scratch workspace — NOT this source directory.
+      //
+      // It was the source directory until a validation round caught what that
+      // means in practice: the pinned venv lives here (14,388 files), so the
+      // rollback snapshot correctly refused and every navigation failed. The
+      // cap was right; pointing a child's cwd at a source tree was wrong.
+      //
+      // A workspace is better isolation anyway: the child cannot write into
+      // the repo at all, and rollback has a small, meaningful radius. The
+      // kernel creates it (see permissions.spawnProcess) — bridge.py is
+      // referenced by absolute path, so it is still found from anywhere.
+      cwd: join(tmpdir(), "optimus-browser-use"),
       // Python needs these to locate an interpreter and its site-packages;
       // everything else in process.env — every provider key, the session
       // secret — is stripped before the child sees it.

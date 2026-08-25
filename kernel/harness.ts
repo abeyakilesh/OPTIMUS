@@ -27,6 +27,7 @@ import type { Broker } from "./broker";
 import type { ArtifactStore } from "./artifacts";
 import { hashInput } from "./artifacts";
 import { createContext, type Fetcher } from "./permissions";
+import { rollbackScope, snapshotTree, restoreTree } from "./rollback";
 
 export interface HarnessDeps {
   broker: Broker;
@@ -64,7 +65,32 @@ export class Harness {
     return this.deps.now ?? Date.now;
   }
 
+  /**
+   * K2b, wired. A step that fails must not leave its half-finished work on
+   * disk — CLAUDE.md: "revert a merge, including the parts that succeeded."
+   *
+   * The scope comes from the capability's OWN manifest (K4's writeRoots and
+   * cwd), which is why this could not exist before the isolation boundary
+   * did: `snapshot()`'s explicit watched-files list required the caller to
+   * already know what a capability was about to touch. Nothing ever knew.
+   *
+   * Scope note, so it is not mistaken for more than it is: this restores
+   * between STEPS, not between attempts inside one step's repair loop. A
+   * retry currently starts from whatever the previous attempt left behind.
+   */
   async runStep(spec: StepSpec, repair?: Repair): Promise<StepOutcome> {
+    const roots = rollbackScope(this.deps.broker.capability(spec.capabilityId).manifest.isolation);
+    const before = roots.length > 0 ? await snapshotTree(roots) : undefined;
+
+    const outcome = await this.runStepUnprotected(spec, repair);
+
+    if (before && outcome.status !== "passed") {
+      outcome.evidence.rolledBack = await restoreTree(before);
+    }
+    return outcome;
+  }
+
+  private async runStepUnprotected(spec: StepSpec, repair?: Repair): Promise<StepOutcome> {
     const { broker, store, fetcher } = this.deps;
     const capability = broker.capability(spec.capabilityId);
     const manifest = capability.manifest;
@@ -83,6 +109,7 @@ export class Harness {
     let input = spec.input;
     let lastChecks: CheckResult[] = [];
     let lastError: string | undefined;
+    let lastOutput: unknown;
     const artifactIds: string[] = [];
 
     // Snapshot what already exists so evidence lists only what THIS step made.
@@ -111,6 +138,7 @@ export class Harness {
 
       const action: Action = { capabilityId: spec.capabilityId, input, attempt };
       const observation = await this.invoke(action, capability, manifest, fetcher);
+      lastOutput = observation.output;
       cost += observation.cost;
 
       // Cost is checked after the fact — we can only know what an attempt
@@ -159,6 +187,8 @@ export class Harness {
               artifactIds,
               lastChecks,
               inputHash,
+              undefined,
+              observation.output,
             ),
             output: observation.output,
           };
@@ -197,6 +227,7 @@ export class Harness {
       exhausted
         ? `attempt budget exhausted after ${attempt} attempt(s): ${lastError ?? "no passing check"}`
         : lastError,
+      lastOutput,
     );
   }
 
@@ -263,6 +294,22 @@ export class Harness {
     return results;
   }
 
+  /**
+   * Artifact ids referenced anywhere in a capability's output. Content
+   * addressing gives them a strict, unmistakable shape, so a recursive scan
+   * is reliable without every capability having to declare them by hand.
+   */
+  private static collectArtifactIds(value: unknown, found: Set<string> = new Set()): Set<string> {
+    if (typeof value === "string") {
+      if (/^sha256:[0-9a-f]{64}$/.test(value)) found.add(value);
+    } else if (Array.isArray(value)) {
+      for (const item of value) Harness.collectArtifactIds(item, found);
+    } else if (value && typeof value === "object") {
+      for (const item of Object.values(value)) Harness.collectArtifactIds(item, found);
+    }
+    return found;
+  }
+
   private seal(
     status: StepStatus,
     spec: StepSpec,
@@ -274,6 +321,7 @@ export class Harness {
     checks: CheckResult[],
     inputHash: string,
     failureReason?: string,
+    output?: unknown,
   ): StepOutcome {
     const evidence: Evidence = {
       stepId: spec.id,
@@ -284,6 +332,10 @@ export class Harness {
       durationMs: this.now() - startedAt,
       cost,
       artifactIds,
+      // Everything the step produced: what it newly wrote, PLUS whatever its
+      // output points at. A repeat run whose bytes already exist writes
+      // nothing new but has still produced that artifact.
+      producedArtifactIds: [...new Set([...artifactIds, ...Harness.collectArtifactIds(output)])],
       checks:
         failureReason && checks.length === 0
           ? [{ checkId: "budget", passed: false, reason: failureReason }]
