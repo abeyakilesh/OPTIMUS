@@ -13,8 +13,17 @@
 name: Gauntlet
 
 on:
+  # NO branch filter, deliberately. `branches: [main]` meant a PR targeting
+  # any other base ran ZERO gates — a stacked PR (one feature branch onto
+  # another) got Vercel and nothing else: no build, no tests, no security, no
+  # absorption guard. CLAUDE.md is explicit: "Required checks on EVERY pull
+  # request." Found when a stacked rollback PR came back with 4 Vercel checks
+  # and no gauntlet at all.
+  #
+  # Nothing ungated ever reached main — the parent PR re-runs on `synchronize`
+  # when the stacked branch merges into it — but the stacked PR itself could
+  # not be verified on its own, which is where a defect would actually hide.
   pull_request:
-    branches: [main]
   merge_group:          # required for a merge queue
   push:
     branches: [main]
