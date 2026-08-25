@@ -56,3 +56,9 @@ next-env.d.ts
 # public repo. Matches every depth, so no per-directory drift is possible.
 README.md
 **/README.md
+
+# Python virtualenvs for SERVICE-fate bridges. Directive #8's rule applies to
+# every package manager, not just npm: dependencies are regenerated from the
+# pinned requirements.txt beside the bridge, never vendored.
+.venv/
+**/.venv/

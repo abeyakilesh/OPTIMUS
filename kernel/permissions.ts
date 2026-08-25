@@ -106,7 +106,12 @@ export function createContext(options: BoundaryOptions): CapabilityContext {
       // The child gets a pinned working directory and a STRIPPED environment.
       // Before K4 this merged all of process.env into every child, handing
       // each one every provider key in .env plus OPTIMUS_SESSION_SECRET.
-      return runProcess(spec, requireCwd(capabilityId, isolation), childEnv(isolation, spec.env));
+      // The kernel creates the workspace itself. A capability calling mkdir
+      // would be reaching around the very boundary it is standing behind, and
+      // spawn() throws outright on a cwd that does not exist.
+      const cwd = requireCwd(capabilityId, isolation);
+      await mkdir(cwd, { recursive: true });
+      return runProcess(spec, cwd, childEnv(isolation, spec.env));
     },
 
     async netFetch(request: NetFetchRequest): Promise<NetFetchResult> {

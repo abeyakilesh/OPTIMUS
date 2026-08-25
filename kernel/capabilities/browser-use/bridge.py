@@ -46,11 +46,38 @@ async def run(request: dict) -> dict:
     await session.start()
     try:
         await session.navigate_to(request["url"])
-        title = await session.get_current_page_title()
+        title = await document_title(session)
         text = await session.get_state_as_text()
         return {"ok": True, "url": request["url"], "title": title, "text": text}
     finally:
         await session.stop()
+
+
+async def document_title(session):
+    """The page's real <title>, read over CDP.
+
+    browser-use 0.13.7's `get_current_page_title()` returns the page URL, not
+    the document title — verified directly: navigating to a data: URL whose
+    title is "REAL_DOC_TITLE" returns the whole data: URL instead. A validation
+    scenario caught it, because the capability's own output contract promises a
+    title and was quietly delivering a URL.
+
+    `Runtime.evaluate` gives the actual value, so this asks Chrome directly and
+    falls back to the upstream method only if CDP is unavailable — degraded,
+    never silently wrong about which one answered.
+    """
+    try:
+        cdp = await session.get_or_create_cdp_session()
+        result = await cdp.cdp_client.send.Runtime.evaluate(
+            params={"expression": "document.title", "returnByValue": True},
+            session_id=cdp.session_id,
+        )
+        value = result.get("result", {}).get("value")
+        if isinstance(value, str):
+            return value
+    except Exception:
+        pass
+    return await session.get_current_page_title()
 
 
 def main() -> None:
