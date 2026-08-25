@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **72 classes · 61 with a real detection mechanism · 11 UNDETECTED**
+> **73 classes · 62 with a real detection mechanism · 11 UNDETECTED**
 >
 > Eleven classes have nothing stopping them recurring today, and several of the sixty "detected" are covered by a
 > single test rather than a general mechanism — the count says a check exists, not that the class is solved.
@@ -903,6 +903,20 @@ name a tracking issue or a reason it cannot be automated.
 **Why it survived:** It reads as the strictest possible setting.
 
 **Detection:** `.github/branch-protection.json` :: `_comment_reviews` records the value, the reason, and the condition for raising it
+
+---
+
+### `check-then-act-on-filesystem`
+
+**Looks like:** Code asks whether a path exists and then reads or writes it, so anything that changes the path in between is acted on unchecked (TOCTOU).
+
+**Instances:** PR #58 — `defect-registry.mjs` guarded with `existsSync(REGISTRY)` and later called `writeFileSync(REGISTRY, …)`; CodeQL alert #55, *"Potential file system race condition"*, and it was correct. PR #28 — the same shape in the sandbox's path containment, closed by resolving symlinks and then operating on the **resolved** path rather than re-deriving it.
+
+**Why it survived:** `existsSync` reads as defensive, and produces a friendlier error than an exception. The gap it opens is invisible in single-threaded reasoning.
+
+**Detection:** `.github/workflows/_static-security.yml` :: CodeQL `js/file-system-race`, a required context; the branch's `required_conversation_resolution` meant the alert **blocked the merge** rather than sitting unread.
+
+**Rule:** Do the operation and handle its failure. A separate existence check is a second, racing operation that buys nothing.
 
 ---
 

@@ -24,12 +24,18 @@ import { execFileSync } from "node:child_process";
 const REGISTRY = "docs/DEFECT_CLASSES.md";
 const mode = process.argv.includes("--update") ? "update" : "check";
 
-if (!existsSync(REGISTRY)) {
-  console.log(`::error title=Defect registry::${REGISTRY} is missing.`);
+// Read directly rather than existsSync-then-read. The guard was a
+// check-then-act on the filesystem: CodeQL flagged the later writeFileSync as
+// a TOCTOU race, and it was right — the file can change between the check and
+// either the read or the write. Letting the read throw is both safer and
+// simpler, and it reports the real errno instead of a generic "is missing".
+let text;
+try {
+  text = readFileSync(REGISTRY, "utf8");
+} catch (e) {
+  console.log(`::error title=Defect registry::Cannot read ${REGISTRY} — ${e.message}`);
   process.exit(1);
 }
-
-const text = readFileSync(REGISTRY, "utf8");
 const errors = [];
 
 /** Split into one block per class. */
