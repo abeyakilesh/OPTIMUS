@@ -68,6 +68,10 @@ Closes #
 - [ ] No gate was disabled, skipped, or made non-blocking to get this merged
 - [ ] Golden tests for anything new added to CI permanently
 - [ ] Nothing in the UI claims a capability that isn't actually wired
+- [ ] **Every change this description claims is actually in the diff** — checked against
+      `git diff --name-only`, not from memory. A PR body that describes work living
+      somewhere else is the same defect as a green check on a capability that does
+      nothing (THE SELF-DESCRIPTION RULE in `CLAUDE.md`)
 
 <!-- If you disabled a gate, say so here explicitly and why. Silently
      weakening the gauntlet is the failure mode this whole process exists
