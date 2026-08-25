@@ -134,44 +134,15 @@ jobs:
     if: always()
     needs: [build, unit, static-security, supply-chain, e2e, perf, ai-review, absorption]
     steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false }
+
+      # Generated from CI_STATUS.md, never restated here. An inline copy of the
+      # absent-gates list is what went stale for a day after K4 landed.
       - name: Report what is and isn't enforced
         env:
           AI_REVIEW_RESULT: ${{ needs.ai-review.result }}
-        run: |
-          {
-            echo "## Gauntlet coverage"
-            echo
-            # Report what ACTUALLY ran. Printing "ai-review enforced" on a run
-            # where it was skipped would make this summary the very thing
-            # CI_STATUS.md exists to prevent: a gate that reads as green
-            # without having run.
-            if [ "$AI_REVIEW_RESULT" = "skipped" ]; then
-              echo "**Enforced this run:** 1 build · 2 unit · 3 static-security · 5 supply-chain · 8 perf · 11 e2e"
-              echo
-              echo "> Gate 4 (ai-review) was **skipped**: dependency-bot PRs change a"
-              echo "> lockfile only, and both risks that carries — known CVEs and"
-              echo "> forbidden licences — are proven by gates 3 and 5, which did run."
-            else
-              echo "**Enforced this run:** 1 build · 2 unit · 3 static-security · 4 ai-review · 5 supply-chain · 8 perf · 10 isolation invariants · 11 e2e"
-            fi
-            echo
-            echo "### NOT enforced — absent, not passing"
-            echo "| Gate | Blocked on | Unblocks when |"
-            echo "|---|---|---|"
-            echo "| 6 · fidelity vs parent | nothing absorbed yet | first repo clears Phase B |"
-            echo "| 7 · verification self-eval | harbor not integrated | K5 exists |"
-            echo "| 9 · scalability smoke | no service surface | first real service ships |"
-            echo "| 12 · dynamic security | no preview deploy | ephemeral previews exist |"
-            echo
-            echo
-            echo "> Gate 10 moved OUT of this list when K4 landed (#28). It runs inside"
-            echo "> \`unit\` (tests/kernel/sandbox.test.ts), not as its own job, because it is"
-            echo "> in-process and needs no environment. This summary said \"blocked on no"
-            echo "> sandbox\" for a full day after the sandbox shipped — a coverage report"
-            echo "> that drifts is the same defect it exists to prevent."
-            echo
-            echo "See \`CI_STATUS.md\`. Do not mark a capability AVAILABLE while a gate it depends on is listed here."
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: node scripts/gate-coverage.mjs >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if any required gate failed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

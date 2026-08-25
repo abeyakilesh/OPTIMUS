@@ -78,7 +78,7 @@ sanitized to valid identifiers; rule logic is unchanged.
 
 | # | Gate | Blocked on | Unblocks when |
 |---|---|---|---|
-| 6 | Fidelity vs parent | Nothing absorbed yet, so no parent behaviour to diff | first repo clears Phase B |
+| 6 | Fidelity vs parent | No golden-output diff harness — the 3 absorbed repos assert fidelity inside the unit suite, per capability, not as a CI gate | a diff harness exists that can fail a PR on drift |
 | 7 | Verification self-eval | `harbor` not integrated | K5 exists |
 | 9 | Scalability smoke | Nothing to load-test — static landing page | first real service surface |
 | 12 | Dynamic security | No deployed preview to attack | ephemeral previews (coolify) |
@@ -111,6 +111,16 @@ admitted gap the broker can see beats a silent one.
 All four guards were mutation-tested: re-opening the environment leak, dropping
 symlink resolution, removing the host check, and loosening the broker rule each
 made the suite fail, and each file was restored byte-identical afterward.
+
+## Operating note · `gh run rerun` replays a STALE payload
+
+`gh run rerun --failed` re-runs the jobs against the **original webhook
+payload**, not the PR's current state. Editing a PR body and re-running does
+not re-evaluate the new body — the absorption guard kept failing on a blank
+template that had already been replaced, and passed locally the whole time.
+
+Only a fresh `pull_request` event (a push) re-reads the PR. Recorded here
+because it costs an hour to rediscover and looks exactly like a broken gate.
 
 ## Gate 4 · scoped away from dependency bots
 
