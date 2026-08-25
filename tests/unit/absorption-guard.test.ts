@@ -21,11 +21,21 @@ import { readFileSync } from "node:fs";
 
 const GUARD = "scripts/absorption-guard.mjs";
 
-function runGuard(body: string, title = "absorb/example: SERVICE"): { code: number; out: string } {
+function runGuard(
+  body: string,
+  title = "absorb/example: SERVICE",
+  shas: { base?: string; head?: string } = {},
+): { code: number; out: string } {
   try {
     const out = execFileSync("node", [GUARD], {
       encoding: "utf8",
-      env: { ...process.env, PR_BODY: body, PR_TITLE: title, BASE_SHA: "", HEAD_SHA: "" },
+      env: {
+        ...process.env,
+        PR_BODY: body,
+        PR_TITLE: title,
+        BASE_SHA: shas.base ?? "",
+        HEAD_SHA: shas.head ?? "",
+      },
     });
     return { code: 0, out };
   } catch (e) {
@@ -146,5 +156,34 @@ describe("it can still tell WHICH PRs it applies to", () => {
     const src = readFileSync(GUARD, "utf8");
     expect(src).toMatch(/CAP_PREFIX = "kernel\/capabilities\/"/);
     expect(src).not.toMatch(/startsWith\("capabilities\/"\)/);
+  });
+});
+
+describe("the file-based checks run against a REAL diff", () => {
+  // The bug these exist for: CAP_PREFIX was declared after its first use, a
+  // TDZ ReferenceError that only fires when `changed` is non-empty. Every
+  // test above leaves BASE_SHA/HEAD_SHA unset, so `changed` is [] and
+  // `.some()` never invokes the callback — the guard's entire file-based half
+  // was untested by its own test file, which is the same "check that cannot
+  // fire" defect the guard was being fixed for.
+  const rev = (r: string) => execFileSync("git", ["rev-parse", r], { encoding: "utf8" }).trim();
+
+  it("does not crash when there is an actual list of changed files", () => {
+    const r = runGuard("A normal change.", "chore: something", { base: rev("HEAD~1"), head: rev("HEAD") });
+    expect(r.out).not.toMatch(/ReferenceError/);
+    expect(r.code).toBe(0);
+  });
+
+  it("still reaches its verdict with a populated diff and an absorption title", () => {
+    const r = runGuard("No score in this body.", "absorb/example: PORT", { base: rev("HEAD~1"), head: rev("HEAD") });
+    expect(r.out).not.toMatch(/ReferenceError/);
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/No Absorption Score found/);
+  });
+
+  it("rejects a malformed SHA instead of handing it to git", () => {
+    const r = runGuard("body", "chore: x", { base: "not-a-sha; rm -rf /", head: rev("HEAD") });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/BASE_SHA is not a valid commit SHA/);
   });
 });

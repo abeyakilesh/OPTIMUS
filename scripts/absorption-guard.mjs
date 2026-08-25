@@ -67,6 +67,17 @@ if (ciTouched.length > 0) {
   }
 }
 
+// `kernel/capabilities/`, not `capabilities/`. The original prefix matched
+// nothing in this repo, so BOTH the absorption detection below and the
+// one-repo-per-PR check were dead from the first commit — a guard that could
+// not fire, printing "Absorption rules satisfied."
+//
+// Declared HERE, above its first use. It was originally declared in section 3
+// and read in section 2, which is a TDZ ReferenceError the moment `changed` is
+// non-empty. Local tests missed it because they left BASE_SHA/HEAD_SHA unset,
+// so `changed` was always [] and `.some()` never ran the callback.
+const CAP_PREFIX = "kernel/capabilities/";
+
 /* ── 2 · is this an absorption PR? ────────────────────────────────────── */
 const isAbsorption =
   // `absorb/scrapling: ...` is this repo's actual convention and the original
@@ -82,11 +93,6 @@ if (!isAbsorption) {
 }
 
 /* ── 3 · one repo per PR ──────────────────────────────────────────────── */
-// `kernel/capabilities/`, not `capabilities/`. The original prefix matched
-// nothing in this repo, so BOTH this check and the file-based absorption
-// detection below were dead from the first commit — a guard that could not
-// fire, printing "Absorption rules satisfied."
-const CAP_PREFIX = "kernel/capabilities/";
 const capDirs = new Set(
   changed
     .filter((f) => f.startsWith(CAP_PREFIX))
