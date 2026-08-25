@@ -427,13 +427,25 @@ export default function ProvidersPanel({ initial }: { initial: StatusPayload }) 
 
         <div className="grid gap-5 sm:grid-cols-3">
           <div>
-            <Label>Models routable</Label>
-            <p className="font-data mt-1.5 text-[15px] text-ink">{n(or.modelCount)}</p>
-            {or.sampleModels.length > 0 ? (
-              <p className="mt-1 font-data text-[11px] leading-relaxed text-faint">
-                {or.sampleModels.slice(0, 3).join(" · ")}
-              </p>
-            ) : null}
+            <Label>Models advertised</Label>
+            <p className="font-data mt-1.5 text-[15px] text-ink">
+              {n(or.advertisedModelCount)}
+              {or.connectionCount !== null ? (
+                <span className="text-[13px] text-faint">
+                  {" "}
+                  · {or.connectionCount} connection{or.connectionCount === 1 ? "" : "s"}
+                </span>
+              ) : null}
+            </p>
+            {/* This label used to read "Models routable", which was wrong and
+                shipped. The gateway lists every provider it knows how to talk
+                to, connected or not: 286 advertised here, and exactly one
+                answered a real request. Advertised is a claim; only a request
+                is evidence — the same mistake as trusting a model catalogue
+                over a 403. */}
+            <p className="mt-1 font-data text-[11px] leading-relaxed text-faint">
+              advertised ≠ reachable — a model needs a configured connection
+            </p>
           </div>
           <div>
             <Label>Requests through the gateway</Label>

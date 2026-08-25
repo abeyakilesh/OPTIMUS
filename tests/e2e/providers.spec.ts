@@ -63,7 +63,8 @@ const MEASURED = {
     reachable: false,
     baseUrl: "http://127.0.0.1:9",
     authenticated: false,
-    modelCount: null,
+    advertisedModelCount: null,
+    connectionCount: null,
     sampleModels: [],
     usage: null,
     usageNote: null,
@@ -148,6 +149,19 @@ test.describe("settings · model providers", () => {
     // characters outside the masked forms.
     const body = (await page.locator("body").innerText()).replace(/[•]/g, "");
     expect(body).not.toMatch(/\b(gsk|sk)_[A-Za-z0-9]{20,}\b/);
+  });
+
+  test("never calls the gateway's advertised catalogue 'routable'", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/settings/providers");
+
+    // This label shipped as "Models routable" and was wrong: OmniRoute
+    // advertised 286 and exactly ONE answered a real request. A catalogue is a
+    // claim about capability; only a request is evidence of it. The assertion
+    // is here so the word cannot quietly come back.
+    await expect(page.getByText("Models advertised")).toBeVisible();
+    await expect(page.getByText(/models routable/i)).toHaveCount(0);
+    await expect(page.getByText(/advertised ≠ reachable/)).toBeVisible();
   });
 
   test("reports a failed refresh instead of leaving stale numbers looking live", async ({ page }) => {
