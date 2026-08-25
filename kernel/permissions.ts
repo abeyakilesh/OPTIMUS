@@ -22,6 +22,14 @@ import type {
   ProcessSpec,
 } from "./types";
 import type { ArtifactStore } from "./artifacts";
+import {
+  DENY_ALL,
+  childEnv,
+  requireCwd,
+  requireHostAllowed,
+  requirePathWithin,
+  type Isolation,
+} from "./sandbox";
 
 export class PermissionDenied extends Error {
   constructor(
@@ -41,6 +49,8 @@ export interface BoundaryOptions {
   granted: readonly Permission[];
   store: ArtifactStore;
   fetcher?: Fetcher;
+  /** K4 blast radius. Omitted means DENY_ALL — fail closed, never open. */
+  isolation?: Isolation;
 }
 
 /**
@@ -48,6 +58,7 @@ export interface BoundaryOptions {
  */
 export function createContext(options: BoundaryOptions): CapabilityContext {
   const { capabilityId, granted, store, fetcher } = options;
+  const isolation = options.isolation ?? DENY_ALL;
 
   const require = (permission: Permission): void => {
     if (!granted.includes(permission)) {
@@ -58,19 +69,25 @@ export function createContext(options: BoundaryOptions): CapabilityContext {
   return {
     async netRead(url: string): Promise<string> {
       require("net:read");
+      requireHostAllowed(capabilityId, isolation.allowedHosts, url);
       if (!fetcher) throw new Error("No fetcher configured for this kernel");
       return fetcher(url);
     },
 
+    // Both fs surfaces read back the RESOLVED path the boundary validated,
+    // never the caller's original string — re-resolving later would reopen a
+    // time-of-check/time-of-use gap between the check and the syscall.
     async fsRead(path: string): Promise<string> {
       require("fs:read");
-      return readFile(path, "utf8");
+      const real = requirePathWithin(capabilityId, isolation.readRoots, path, "read");
+      return readFile(real, "utf8");
     },
 
     async fsWrite(path: string, data: string): Promise<void> {
       require("fs:write");
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, data, "utf8");
+      const real = requirePathWithin(capabilityId, isolation.writeRoots, path, "write");
+      await mkdir(dirname(real), { recursive: true });
+      await writeFile(real, data, "utf8");
     },
 
     // The artifact store is the kernel's own surface, not the outside world:
@@ -86,12 +103,16 @@ export function createContext(options: BoundaryOptions): CapabilityContext {
 
     async spawnProcess(spec: ProcessSpec): Promise<ProcessResult> {
       require("proc:spawn");
-      return runProcess(spec);
+      // The child gets a pinned working directory and a STRIPPED environment.
+      // Before K4 this merged all of process.env into every child, handing
+      // each one every provider key in .env plus OPTIMUS_SESSION_SECRET.
+      return runProcess(spec, requireCwd(capabilityId, isolation), childEnv(isolation, spec.env));
     },
 
     async netFetch(request: NetFetchRequest): Promise<NetFetchResult> {
       const method = request.method ?? "GET";
       require(method === "GET" || method === "HEAD" ? "net:read" : "net:write");
+      requireHostAllowed(capabilityId, isolation.allowedHosts, request.url);
       return runFetch(request, method);
     },
   };
@@ -104,10 +125,18 @@ export function createContext(options: BoundaryOptions): CapabilityContext {
  * single hung process (a browser that never responds, a stuck subprocess)
  * would block past the step's budget instead of failing honestly within it.
  */
-function runProcess(spec: ProcessSpec): Promise<ProcessResult> {
+function runProcess(
+  spec: ProcessSpec,
+  cwd: string,
+  env: Record<string, string>,
+): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(spec.command, spec.args ?? [], {
-      env: { ...process.env, ...spec.env },
+      cwd,
+      // Cast, not widen: this env is deliberately NOT the parent's ProcessEnv
+      // (which Next augments with a required NODE_ENV). childEnv's return type
+      // stays honest about what it actually hands the child.
+      env: env as NodeJS.ProcessEnv,
       stdio: ["pipe", "pipe", "pipe"],
     });
 

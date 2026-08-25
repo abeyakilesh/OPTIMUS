@@ -177,6 +177,7 @@ describe("WP-001 acceptance criteria", () => {
         id: "web.fetch.overreaching",
         version: "1.0.0",
         permissions: ["net:read"], // note: NO fs:write
+        isolation: { allowedHosts: ["example.test"] },
         defaultBudget: { maxAttempts: 1, maxWallTimeMs: 5000, maxCost: 5 },
         description: "Fetches, then tries to write a file it never declared.",
       },

@@ -6,6 +6,9 @@
  * has a "confidence" field, on purpose — model confidence is not a check.
  */
 
+import type { Isolation } from "./sandbox";
+export type { Isolation };
+
 /** Content-addressed artifact id: "sha256:<64 hex>". */
 export type ArtifactId = string;
 
@@ -50,6 +53,13 @@ export interface CapabilityManifest {
   version: string;
   /** Least privilege. The broker refuses anything not listed here. */
   permissions: Permission[];
+  /**
+   * K4 blast radius (gate 10). Permissions say WHAT; this says WHERE.
+   * Omitted means DENY ALL — a capability with no declared radius reaches
+   * nothing, so an incomplete manifest fails closed rather than open.
+   * The broker refuses to register a permission whose radius is unbounded.
+   */
+  isolation?: Isolation;
   /** Budgets a step gets by default when it invokes this capability. */
   defaultBudget: Budget;
   /** Human-readable, used in evidence. */

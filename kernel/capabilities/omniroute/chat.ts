@@ -80,6 +80,13 @@ export const llmChat: Capability = {
     id: "llm.chat",
     version: "3.8.50-service", // pinned OmniRoute version, see requirements.txt
     permissions: ["net:write"],
+    isolation: {
+      // CLAUDE.md: OmniRoute is BUNDLED — "a local child process (stdio/
+      // localhost, no internet). It is NOT an external API." So the radius
+      // is loopback, full stop. A caller passing a remote baseUrl is denied
+      // by the boundary, which is the intended behaviour, not a limitation.
+      allowedHosts: ["127.0.0.1", "localhost", "[::1]"],
+    },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: DEFAULT_TIMEOUT_MS, maxCost: 20 },
     description:
       "Sends a chat completion through a local OmniRoute instance's real " +

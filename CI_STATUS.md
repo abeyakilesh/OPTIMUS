@@ -1,10 +1,10 @@
 # CI status — the honest ledger
 
 `CLAUDE.md` specifies a 12-check gauntlet. **7 are live and can fail your PR
-today. 5 are not implemented**, because there is nothing real for them to test
+today. 4 are not implemented**, because there is nothing real for them to test
 yet — and one gate exists that the build bible didn't ask for.
 
-The five missing gates are deliberately *absent* from the pipeline rather than
+The four missing gates are deliberately *absent* from the pipeline rather than
 stubbed green. A gate that always passes is worse than no gate: it manufactures
 confidence. That is Prime Directive #4 applied to CI.
 
@@ -81,10 +81,36 @@ sanitized to valid identifiers; rule logic is unchanged.
 | 6 | Fidelity vs parent | Nothing absorbed yet, so no parent behaviour to diff | first repo clears Phase B |
 | 7 | Verification self-eval | `harbor` not integrated | K5 exists |
 | 9 | Scalability smoke | Nothing to load-test — static landing page | first real service surface |
-| 10 | Isolation invariants | No sandbox to escape | K4 + codesandbox microVM |
 | 12 | Dynamic security | No deployed preview to attack | ephemeral previews (coolify) |
 
 Do not mark a capability AVAILABLE while a gate it depends on is on this list.
+
+### Gate 10 · isolation invariants — implemented 2026-08-24
+
+Was listed here as *"blocked on K4 + codesandbox microVM."* The microVM half is
+gone: codesandbox-client is GPL and is now a read-only FIXTURE (see CLAUDE.md's
+RE-FATED table), so K4 was built local-first instead — a declared blast radius
+per capability, enforced at the one door K2 already owned.
+
+It runs inside `unit / unit + contract` (`tests/kernel/sandbox.test.ts`, 22
+assertions) rather than as its own pipeline job, because it is in-process and
+needs no environment. **Scoped honestly** — what it does and does not prove:
+
+| Enforced and tested | Not enforced |
+|---|---|
+| filesystem read/write confined to declared roots, symlinks resolved first | a child process's own syscalls, once spawned |
+| network host allow-list, exact match, no wildcards, `file://` refused | a child process's own network egress |
+| child environment stripped to a neutral base + explicit allow-list | |
+| child working directory pinned | |
+| broker refuses any permission whose radius is unbounded | |
+
+The right-hand column is why `browser.navigate` declares
+`unconfinedChildEgress: true` and scores **3/5**, not 5/5, on sandbox. An
+admitted gap the broker can see beats a silent one.
+
+All four guards were mutation-tested: re-opening the environment leak, dropping
+symlink resolution, removing the host check, and loosening the broker rule each
+made the suite fail, and each file was restored byte-identical afterward.
 
 ## Gate 4 · scoped away from dependency bots
 

@@ -19,6 +19,10 @@ export const webFetch: Capability = {
     id: "web.fetch",
     version: "1.0.0",
     permissions: ["net:read"],
+    // netRead runs IN-PROCESS here, so the boundary can and does police it:
+    // a named host, not a blanket excuse. The injected fetcher (HarnessDeps
+    // .fetcher) never sees a URL this list rejects.
+    isolation: { allowedHosts: ["example.com"] },
     defaultBudget: { maxAttempts: 3, maxWallTimeMs: 30 * ONE_SECOND, maxCost: 10 },
     description: "Fetch a URL and store the response body as an artifact.",
   },

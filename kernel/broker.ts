@@ -8,6 +8,7 @@
  */
 
 import type { Budget, Capability, CapabilityManifest, Check } from "./types";
+import type { Isolation } from "./sandbox";
 
 export class BrokerError extends Error {}
 
@@ -25,6 +26,44 @@ function assertValidBudget(budget: Budget, id: string): void {
   }
 }
 
+/**
+ * Gate 10, enforced at registration: a capability may not declare a permission
+ * whose blast radius is unbounded. Permissions say WHAT, isolation says WHERE,
+ * and a manifest that says what without where is a hole with paperwork.
+ *
+ * Refusing here rather than at call time is deliberate — a capability that can
+ * never legally act should fail on the way IN, not halfway through a mission.
+ */
+function assertBoundedRadius(manifest: CapabilityManifest): void {
+  const iso: Isolation = manifest.isolation ?? {};
+  const id = manifest.id;
+  const has = (p: string) => manifest.permissions.includes(p as never);
+
+  if (has("fs:read") && !iso.readRoots?.length) {
+    throw new BrokerError(`${id}: declares fs:read but no isolation.readRoots — unbounded radius`);
+  }
+  if (has("fs:write") && !iso.writeRoots?.length) {
+    throw new BrokerError(`${id}: declares fs:write but no isolation.writeRoots — unbounded radius`);
+  }
+  // unconfinedChildEgress excuses a net permission ONLY for a capability that
+  // also spawns a process — that is the one case where the traffic genuinely
+  // leaves from somewhere the kernel cannot see. A capability calling netRead
+  // or netFetch in-process IS policeable, so it gets no such excuse: letting
+  // the flag stand in for a real allow-list there would have been a hole
+  // wearing an honest label. (Caught by the acceptance suite, not by review.)
+  const childEgressExcused = has("proc:spawn") && iso.unconfinedChildEgress === true;
+  if ((has("net:read") || has("net:write")) && !iso.allowedHosts?.length && !childEgressExcused) {
+    throw new BrokerError(
+      `${id}: declares a net permission but no isolation.allowedHosts. In-process network calls ` +
+        `must name their hosts. Only a capability that ALSO declares proc:spawn may substitute ` +
+        `unconfinedChildEgress, and only because the kernel cannot police a child's sockets`,
+    );
+  }
+  if (has("proc:spawn") && !iso.cwd) {
+    throw new BrokerError(`${id}: declares proc:spawn but no isolation.cwd — the child would inherit ours`);
+  }
+}
+
 export class Broker {
   private readonly capabilities = new Map<string, Capability>();
   private readonly checks = new Map<string, Check>();
@@ -37,6 +76,7 @@ export class Broker {
       throw new BrokerError(`Capability already registered: ${manifest.id}`);
     }
     assertValidBudget(manifest.defaultBudget, manifest.id);
+    assertBoundedRadius(manifest);
     this.capabilities.set(manifest.id, capability);
   }
 
