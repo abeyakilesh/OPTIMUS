@@ -189,7 +189,37 @@ rules), gitleaks, and dependency CVEs.
 
 ## Absorption score
 
-No repo absorbed. Every repo sits at **0/100** — valid and honest, meaning
-"issue not opened". The first non-zero score requires a merged PR with real
-fidelity evidence, and `absorption-guard.mjs` will reject the PR if the
-arithmetic doesn't add up or Safety is claimed as partial credit.
+> **This paragraph used to read "No repo absorbed. Every repo sits at 0/100."**
+> Three were absorbed. It is the second stale claim found in this file (gate 6's
+> blocker was the first, #34) and the reason THE SELF-DESCRIPTION RULE exists:
+> a single source still needs its own freshness check.
+
+**Rubric changed 2026-08-25 (#40):** Safety is now **30** across six boundaries
+— permission · sandbox · **input** · verify · log · rollback — and Integration
+is **10**. Gate 8's input contract moved from Integration ("is it declared") to
+Safety ("does it hold"). A relocation, not an addition: the total is still 100.
+Enforced by `scripts/absorption-guard.mjs` + `tests/unit/absorption-guard.test.ts`.
+
+| Capability | Fate | Last recorded | Where recorded | Input boundary (new) |
+|---|---|---|---|---|
+| `llm.chat` (OmniRoute) | SERVICE | **51/100** — F 10/35 · S 15/25 · R 7/15 · I 15/15 · P 4/10 | PR #20, reaffirmed #27 | ✅ `baseUrl` is `kind: "url"`, host list identical to its isolation |
+| `browser.navigate` (browser-use) | SERVICE | **48/100** (no component breakdown in the PR body) | PR #18 | ✅ `pythonExecutable` + `chromeExecutablePath` are `kind: "executable"` with allow-lists |
+| `scrapling.relocate` | PORT | **18/100** (no component breakdown in the PR body) | PR #15, #16 | ✅ parent fingerprint mirrored field-by-field |
+
+**These totals are NOT current, and that is the honest state.** Safety reached
+25/25 for all three in #28–#32, and no PR since restated a full breakdown. The
+numbers above are the last ones actually *written down*, with their source — not
+a recomputation, and not to be quoted as today's score.
+
+**Why they were this hard to find.** Scores live only in merged PR bodies, in
+three different formats, several superseded by later PRs. There was no
+current-state record anywhere in the repo, which means the bible's rule that *"a
+score may go down"* had nowhere to be written. This table is that place; it is
+now the single source, and it inherits the corollary above — it needs its own
+freshness check, or it becomes the next stale claim in this file.
+
+**Recomputation under the new rubric is outstanding (#52).** A capability with
+full Integration marks loses 5 there and earns 5 back under `input` **only if
+its contract actually constrains its dangerous field**. All three do (checked in
+code, right-hand column), so all three are expected to be net zero — but
+"expected" is not "computed", and this file does not get to round that up.
