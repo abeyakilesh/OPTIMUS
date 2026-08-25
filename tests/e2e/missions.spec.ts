@@ -136,4 +136,98 @@ test.describe("missions", () => {
     await expect(page.getByText("✓ llm.chatSucceeded")).toBeVisible();
     await expect(page.getByText("123ms")).toBeVisible();
   });
+
+  /**
+   * The exact failure a real user hit and screenshotted: the reply came back
+   * with an empty body, and the UI announced "model layer unavailable —
+   * Failed to execute 'json' on 'Response': Unexpected end of JSON input",
+   * blaming a component that was never even reached. Directive #4 — a
+   * message that misreports which boundary broke is a demo that lies.
+   */
+  test("an empty response body is reported as a transport failure, never as a model failure", async ({
+    page,
+  }) => {
+    await page.route("**/api/missions", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({ status: 200, contentType: "application/json", body: "" });
+    });
+
+    await page.goto("/chat");
+    await page.getByPlaceholder("Message OPTIMUS…").fill("hi");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    const banner = page.locator("[data-failure-kind]");
+    await expect(banner).toHaveAttribute("data-failure-kind", "malformed");
+    await expect(banner).toContainText("unexpected response from OPTIMUS");
+    await expect(banner).toContainText("empty body");
+    await expect(page.getByText("model layer unavailable")).toHaveCount(0);
+    // And no fabricated reply bubble to paper over it.
+    await expect(page.locator('[data-role="assistant"]')).toHaveCount(0);
+  });
+
+  test("a failed send is retryable, and the retry does not duplicate the question", async ({ page }) => {
+    let attempt = 0;
+    await page.route("**/api/missions", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      attempt += 1;
+      if (attempt === 1) {
+        return route.fulfill({ status: 200, contentType: "application/json", body: "" });
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          missionId: "retried-mission",
+          status: "green",
+          content: "it worked the second time",
+          steps: [
+            {
+              id: "chat",
+              capabilityId: "llm.chat",
+              status: "finished",
+              durationMs: 42,
+              checks: [{ checkId: "llm.chatSucceeded", passed: true, reason: "ok" }],
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto("/chat");
+    await page.getByPlaceholder("Message OPTIMUS…").fill("only asked once");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    await expect(page.locator("[data-failure-kind]")).toBeVisible();
+    await page.getByRole("button", { name: "Retry" }).click();
+
+    await expect(page.getByText("it worked the second time")).toBeVisible();
+    await expect(page.locator("[data-failure-kind]")).toHaveCount(0);
+    // The question the user typed is still there exactly once — not lost,
+    // not duplicated by the retry.
+    await expect(page.locator('[data-role="user"]', { hasText: "only asked once" })).toHaveCount(1);
+  });
+
+  test("an expired session says so, and offers a way back in, instead of blaming the model", async ({
+    page,
+  }) => {
+    await page.route("**/api/missions", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, reason: "authentication required" }),
+      });
+    });
+
+    await page.goto("/chat");
+    await page.getByPlaceholder("Message OPTIMUS…").fill("hi");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    const banner = page.locator("[data-failure-kind]");
+    await expect(banner).toHaveAttribute("data-failure-kind", "signed-out");
+    await expect(banner).toContainText("session expired");
+    await expect(page.getByRole("link", { name: "Sign in again" })).toBeVisible();
+    await expect(page.getByText("model layer unavailable")).toHaveCount(0);
+  });
 });
