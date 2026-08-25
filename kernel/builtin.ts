@@ -97,14 +97,31 @@ export const titleNonEmpty: Check = {
   },
 };
 
-/** Proves the artifact the step claims to have written actually exists. */
-export const artifactExists: Check = {
-  id: "artifact.exists",
+/**
+ * Proves the step's artifact is readable AND that its bytes still hash to the
+ * id the step reported.
+ *
+ * RENAMED from `artifact.exists` in #60, because the check now proves strictly
+ * more than its old name said. Existence was all it could ever assert while
+ * `ArtifactStore.get()` returned bytes unverified; with the store enforcing
+ * the invariant on read, a pass here means the content is intact, and evidence
+ * reading "artifact.exists ✔" would understate what was established. A name
+ * that understates is still a name that has to be checked against behaviour
+ * (THE SELF-DESCRIPTION RULE) — the direction of the error is luck, not
+ * design.
+ *
+ * The verification lives in the store, not here. This check must not re-hash
+ * independently: a check that re-implements the guarantee it is checking will
+ * pass whenever its own copy of the logic agrees with itself, which is how a
+ * check stops testing its subject (THE MUTATION RULE).
+ */
+export const artifactIntact: Check = {
+  id: "artifact.intact",
   async run(output, ctx): Promise<CheckResult> {
     const id = (output as { artifactId?: unknown })?.artifactId;
     if (typeof id !== "string") {
       return {
-        checkId: "artifact.exists",
+        checkId: "artifact.intact",
         passed: false,
         reason: `step returned no artifactId (got ${JSON.stringify(id)})`,
       };
@@ -112,14 +129,14 @@ export const artifactExists: Check = {
     try {
       const bytes = await ctx.readArtifact(id);
       return {
-        checkId: "artifact.exists",
+        checkId: "artifact.intact",
         passed: true,
-        reason: `artifact ${id} readable, ${bytes.length} bytes`,
+        reason: `artifact ${id} readable and intact, ${bytes.length} bytes`,
         detail: { artifactId: id, bytes: bytes.length },
       };
     } catch (error) {
       return {
-        checkId: "artifact.exists",
+        checkId: "artifact.intact",
         passed: false,
         reason: `artifact ${id} is not readable: ${
           error instanceof Error ? error.message : String(error)

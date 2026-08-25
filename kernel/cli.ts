@@ -64,7 +64,7 @@ async function main(): Promise<void> {
         capabilityId: "web.fetch",
         input: { url: "https://example.com" },
         dependsOn: [],
-        checks: ["artifact.exists"],
+        checks: ["artifact.intact"],
         agent: "collector",
       },
       {
@@ -72,7 +72,7 @@ async function main(): Promise<void> {
         capabilityId: "html.extractTitle",
         input: { artifactId: addressOf(FIXTURE_HTML) },
         dependsOn: ["fetch"],
-        checks: ["title.nonEmpty", "artifact.exists"],
+        checks: ["title.nonEmpty", "artifact.intact"],
         agent: "analyst",
       },
     ],

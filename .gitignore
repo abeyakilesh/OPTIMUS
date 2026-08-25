@@ -75,3 +75,9 @@ README.md
 # ⚠️ Ignoring does NOT unpublish. It was in this repo's history from #35 to
 # 2026-08-25 while the repo was PUBLIC. History still holds it.
 CLAUDE.md
+
+# Mutation-test scratch. tests/kernel/artifact-integrity.test.ts compiles the
+# REAL kernel/artifacts.ts with verification stripped out, to prove the tamper
+# tests fail without it (THE MUTATION RULE). The file is written with a unique
+# name and unlinked in a finally; this entry only covers a killed process.
+kernel/artifacts.mutant-*.ts

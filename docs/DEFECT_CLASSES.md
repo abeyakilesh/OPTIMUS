@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **73 classes · 62 with a real detection mechanism · 11 UNDETECTED**
+> **74 classes · 63 with a real detection mechanism · 11 UNDETECTED**
 >
 > Eleven classes have nothing stopping them recurring today, and several of the sixty "detected" are covered by a
 > single test rather than a general mechanism — the count says a check exists, not that the class is solved.
@@ -38,7 +38,7 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** One fact stored in two places; the copy nobody edits goes stale and is the one people read.
 
-**Instances:** PR #33 (`gauntlet.yml` printed *"gate 10 · isolation invariants | no sandbox"* for a full day after K4 merged, while 24 assertions enforced it); PR #33 (CLAUDE.md said **554** ast-grep rules; the real count is **184**).
+**Instances:** PR #33 (`gauntlet.yml` printed *"gate 10 · isolation invariants | no sandbox"* for a full day after K4 merged, while 24 assertions enforced it); PR #33 (CLAUDE.md said **554** ast-grep rules; the real count is **184**); issue #60 (`MemoryArtifactStore.has()` re-implemented the integrity comparison inline as `addressOf(found) === id` instead of calling `verifyIntegrity` — caught by mutation testing **within the hour**, when stripping verification out of `get()` left that adapter's `has()` still answering correctly off its own private copy of the rule).
 
 **Why it survived:** Both copies were correct when written. Nothing tied them together, so editing one never prompted the other.
 
@@ -606,6 +606,20 @@ name a tracking issue or a reason it cannot be automated.
 
 ## E · Boundaries, wiring and blast radius
 
+### `invariant-enforced-one-way`
+
+**Looks like:** A guarantee is enforced where data is written and merely assumed where it is read. The write side is real, so the property is genuinely true of everything the system produced itself — and false the moment anything else touches the store.
+
+**Instances:** Issue #60 — `ArtifactStore.put()` derived the id from the bytes; `get()` checked the file was present and returned it **without re-deriving the address**, so bytes altered underneath the store came back as the artifact requested and `artifact.exists` reported them green (*"readable, 1256 bytes"*). Named as facade #3 in `OPTIMUS_AUDIT_2026-08-26.md`. The same shape is open in the capability contract: `CapabilityManifest.inputConstraints` is required and enforced on every attempt, while a capability's **output** is unconstrained and undeclared — one direction of the contract holds, the other is trusted.
+
+**Why it survived:** The requirement's own verification asked for the write half and nothing else. FR-4 read *"Hash test: re-writing identical bytes yields the same id; changed bytes yield a different one"* — which is entirely about `addressOf`, passes forever, and never once reads anything back. So the requirement was **fully satisfied while half of the property it stated was untrue**, and the phrase "content-addressed" appeared in 20 places across 14 files, including a user-facing surface, on that basis. Nothing was wrong except the half nobody wrote down.
+
+**Detection:** `tests/kernel/artifact-integrity.test.ts` :: one conformance suite over every `ArtifactStore` implementation, with an automated mutation test asserting the tamper cases go red when `verifyIntegrity` is stripped from the real source. Partial by construction — it covers the artifact store, not the general class, and an adapter nobody adds to the table is not covered by it.
+
+**Rule:** A round trip has two ends. Enforce the invariant at the end you do not control.
+
+---
+
 ### `permission-without-radius`
 
 **Looks like:** A permission says what a capability may do and nothing says where, so the grant is unbounded.
@@ -910,7 +924,7 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** Code asks whether a path exists and then reads or writes it, so anything that changes the path in between is acted on unchecked (TOCTOU).
 
-**Instances:** PR #58 — `defect-registry.mjs` guarded with `existsSync(REGISTRY)` and later called `writeFileSync(REGISTRY, …)`; CodeQL alert #55, *"Potential file system race condition"*, and it was correct. PR #28 — the same shape in the sandbox's path containment, closed by resolving symlinks and then operating on the **resolved** path rather than re-deriving it.
+**Instances:** PR #58 — `defect-registry.mjs` guarded with `existsSync(REGISTRY)` and later called `writeFileSync(REGISTRY, …)`; CodeQL alert #55, *"Potential file system race condition"*, and it was correct. Issue #60 — `DiskArtifactStore.get()` had the identical shape (`existsSync(path)` then `readFile(path)`); removed as a side effect of adding integrity checking, and it also stopped collapsing every read failure into *"No such artifact"*. PR #28 — the same shape in the sandbox's path containment, closed by resolving symlinks and then operating on the **resolved** path rather than re-deriving it.
 
 **Why it survived:** `existsSync` reads as defensive, and produces a friendlier error than an exception. The gap it opens is invisible in single-threaded reasoning.
 

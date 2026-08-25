@@ -24,7 +24,7 @@ import {
 } from "../../kernel/artifacts";
 import { fold } from "../../kernel/events";
 import { snapshot, rollback } from "../../kernel/rollback";
-import { webFetch, htmlExtractTitle, titleNonEmpty, artifactExists } from "../../kernel/builtin";
+import { webFetch, htmlExtractTitle, titleNonEmpty, artifactIntact } from "../../kernel/builtin";
 import type { Capability, MissionSpec } from "../../kernel/types";
 
 /** A fixed page so every run is deterministic — no real network, ever. */
@@ -39,7 +39,7 @@ function buildKernel(store = new MemoryArtifactStore()) {
   broker.register(webFetch);
   broker.register(htmlExtractTitle);
   broker.registerCheck(titleNonEmpty);
-  broker.registerCheck(artifactExists);
+  broker.registerCheck(artifactIntact);
 
   const fetcher = async (url: string) => {
     if (url !== "https://example.com") throw new Error(`unexpected url ${url}`);
@@ -61,14 +61,14 @@ function skeletonMission(): MissionSpec {
         capabilityId: "web.fetch",
         input: { url: "https://example.com" },
         dependsOn: [],
-        checks: ["artifact.exists"],
+        checks: ["artifact.intact"],
       },
       {
         id: "extract",
         capabilityId: "html.extractTitle",
         input: { artifactId: addressOf(FIXTURE_HTML) },
         dependsOn: ["fetch"],
-        checks: ["title.nonEmpty", "artifact.exists"],
+        checks: ["title.nonEmpty", "artifact.intact"],
       },
     ],
   };
@@ -112,7 +112,7 @@ describe("WP-001 acceptance criteria", () => {
             // worse than one that breaks.
             input: { artifactId: addressOf(FIXTURE_HTML) },
             dependsOn: [],
-            checks: ["title.nonEmpty", "artifact.exists"],
+            checks: ["title.nonEmpty", "artifact.intact"],
           },
         ],
       });
@@ -209,7 +209,7 @@ describe("WP-001 acceptance criteria", () => {
       capabilityId: "web.fetch.overreaching",
       input: {},
       dependsOn: [],
-      checks: ["artifact.exists"],
+      checks: ["artifact.intact"],
     });
 
     expect(outcome.status).not.toBe("passed");
