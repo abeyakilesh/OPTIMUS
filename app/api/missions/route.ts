@@ -13,13 +13,13 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
-import { Broker } from "@/kernel/broker";
 import { Harness } from "@/kernel/harness";
 import { Scheduler } from "@/kernel/scheduler";
 import { DiskArtifactStore } from "@/kernel/artifacts";
 import { DiskMissionStore, type MissionSummary } from "@/kernel/missionStore";
 import type { Evidence, MissionSpec } from "@/kernel/types";
-import { llmChat, llmChatSucceeded, type LlmChatMessage } from "@/kernel/capabilities/omniroute/chat";
+import { buildBroker } from "@/kernel/registry";
+import type { LlmChatMessage } from "@/kernel/capabilities/omniroute/chat";
 import { DATA_DIR } from "@/lib/data-dir";
 import { resolveChatContent } from "@/lib/missions/resolveChatContent";
 
@@ -123,9 +123,11 @@ export async function POST(request: NextRequest) {
     ],
   };
 
-  const broker = new Broker();
-  broker.register(llmChat);
-  broker.registerCheck(llmChatSucceeded);
+  // One registry, shared with kernel/cli.ts. This registers every absorbed
+  // capability, not just the one this mission plan happens to name — so when
+  // a planner writes the plan, the set it can choose from is the real one.
+  // Registered is not AVAILABLE: nothing in the UI presents these as working.
+  const broker = buildBroker();
   const store = artifactStore();
   const harness = new Harness({ broker, store });
   const scheduler = new Scheduler({ harness });
