@@ -17,6 +17,7 @@
 
 import type { Capability, Check, CheckResult } from "../../types";
 import { TRUST_LEVELS, renderForModel, type Trust } from "../../provenance";
+import { ARTIFACT_ID_OUTPUT } from "../../outputContract";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:20128";
 
@@ -148,6 +149,30 @@ export const llmChat: Capability = {
         },
       },
       timeoutMs: { kind: "number", integer: true, min: 1, max: 600_000 },
+    },
+    // Read off the three return paths in `run()` below — the timeout path, the
+    // !ok path, and the success path — not off `LlmChatOutput`'s declaration.
+    // They agree here, and checking rather than assuming is the point.
+    //
+    // Only `ok`, `status` and `artifactId` are required, because that is what
+    // is true on EVERY path: a timeout returns status 0 with no model, no
+    // content and no usage. Marking `content` required would fail the very
+    // path that exists to report a failure honestly.
+    outputs: {
+      ok: { kind: "boolean", required: true },
+      status: { kind: "number", required: true, integer: true, min: 0 },
+      model: { kind: "string" },
+      content: { kind: "string" },
+      usage: {
+        kind: "object",
+        fields: {
+          promptTokens: { kind: "number", integer: true, min: 0 },
+          completionTokens: { kind: "number", integer: true, min: 0 },
+          totalTokens: { kind: "number", integer: true, min: 0 },
+        },
+      },
+      error: { kind: "string" },
+      artifactId: ARTIFACT_ID_OUTPUT,
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: DEFAULT_TIMEOUT_MS, maxCost: 20 },
     description:

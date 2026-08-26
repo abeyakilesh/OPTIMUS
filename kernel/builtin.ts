@@ -6,6 +6,7 @@
  */
 
 import type { Capability, Check, CheckResult } from "./types";
+import { ARTIFACT_ID_OUTPUT } from "./outputContract";
 
 const ONE_SECOND = 1000;
 
@@ -27,6 +28,13 @@ export const webFetch: Capability = {
       // Same host list as isolation.allowedHosts above, checked one layer
       // earlier: this refuses the value, that refuses the socket.
       url: { kind: "url", required: true, allowedSchemes: ["http", "https"], allowedHosts: ["example.com"] },
+    },
+    // Read off `run()` below, not off the description: it returns the address
+    // of the stored body and the body's length, and nothing else. A later
+    // step's {"$from": "fetch.title"} is refused against exactly this.
+    outputs: {
+      artifactId: ARTIFACT_ID_OUTPUT,
+      bytes: { kind: "number", required: true, integer: true, min: 0 },
     },
     defaultBudget: { maxAttempts: 3, maxWallTimeMs: 30 * ONE_SECOND, maxCost: 10 },
     description: "Fetch a URL and store the response body as an artifact.",
@@ -55,6 +63,15 @@ export const htmlExtractTitle: Capability = {
       // A content address, and shaped like one: `sha256:` + 64 hex is 71
       // characters exactly, so the bounds are the real format, not a guess.
       artifactId: { kind: "string", required: true, minLength: 71, maxLength: 71 },
+    },
+    // `title` carries no minLength on purpose. The capability legitimately
+    // returns "" for `<title></title>`; whether an empty title is ACCEPTABLE
+    // is the mission's question, and `title.nonEmpty` is the check that asks
+    // it. A contract that refused it here would make the check unreachable and
+    // report the wrong reason for the same failure.
+    outputs: {
+      title: { kind: "string", required: true },
+      artifactId: ARTIFACT_ID_OUTPUT,
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 5 * ONE_SECOND, maxCost: 5 },
     description: "Extract the <title> text from a stored HTML artifact.",

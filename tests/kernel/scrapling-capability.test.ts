@@ -96,6 +96,23 @@ describe("gate 12 · verify — the contract check actually blocks a lie", () =>
         // capability's — otherwise it fails at the manifest door and never
         // reaches the contract check this test exists to exercise.
         inputConstraints: {},
+        // Same reasoning, one door further along (#66). The canned lie uses
+        // placeholder values — `artifactId: "x"`, a one-field fingerprint —
+        // which the REAL manifest's outputs correctly refuse. Inheriting them
+        // would make this test go red at the output door while still looking
+        // like it was proving something about `relocate.contractHonored`.
+        //
+        // The lie being told here is a CONTRACT lie (found=true below the
+        // threshold), not a SHAPE lie, and this declaration is deliberately
+        // the loosest one that still admits the shape — so the only thing left
+        // that can fail the step is the check.
+        outputs: {
+          found: { kind: "boolean", required: true },
+          score: { kind: "number", required: true },
+          percentage: { kind: "number", required: true },
+          matches: { kind: "array", required: true, of: { kind: "object", fields: { tag: { kind: "string" } } } },
+          artifactId: { kind: "string", required: true },
+        },
       },
       async run() {
         return { found: true, score: 10, percentage: 40, matches: [{ tag: "p" }], artifactId: "x" };
@@ -114,6 +131,9 @@ describe("gate 12 · verify — the contract check actually blocks a lie", () =>
 
     expect(outcome.status).not.toBe("passed");
     expect(outcome.evidence.checks[0].reason).toMatch(/below its own threshold/);
+    // Names WHICH gate blocked, so this cannot go on passing because some
+    // earlier door started refusing the fixture. See AC-3's note.
+    expect(outcome.evidence.checks.map((c) => c.checkId)).toEqual(["relocate.contractHonored"]);
   });
 
   it("fails when found=false contradicts a score that actually clears the threshold", async () => {
@@ -129,6 +149,23 @@ describe("gate 12 · verify — the contract check actually blocks a lie", () =>
         // capability's — otherwise it fails at the manifest door and never
         // reaches the contract check this test exists to exercise.
         inputConstraints: {},
+        // Same reasoning, one door further along (#66). The canned lie uses
+        // placeholder values — `artifactId: "x"`, a one-field fingerprint —
+        // which the REAL manifest's outputs correctly refuse. Inheriting them
+        // would make this test go red at the output door while still looking
+        // like it was proving something about `relocate.contractHonored`.
+        //
+        // The lie being told here is a CONTRACT lie (found=true below the
+        // threshold), not a SHAPE lie, and this declaration is deliberately
+        // the loosest one that still admits the shape — so the only thing left
+        // that can fail the step is the check.
+        outputs: {
+          found: { kind: "boolean", required: true },
+          score: { kind: "number", required: true },
+          percentage: { kind: "number", required: true },
+          matches: { kind: "array", required: true, of: { kind: "object", fields: { tag: { kind: "string" } } } },
+          artifactId: { kind: "string", required: true },
+        },
       },
       async run() {
         return { found: false, score: 85, percentage: 40, matches: [], artifactId: "x" };
@@ -147,6 +184,9 @@ describe("gate 12 · verify — the contract check actually blocks a lie", () =>
 
     expect(outcome.status).not.toBe("passed");
     expect(outcome.evidence.checks[0].reason).toMatch(/clears threshold/);
+    // Names WHICH gate blocked, so this cannot go on passing because some
+    // earlier door started refusing the fixture. See AC-3's note.
+    expect(outcome.evidence.checks.map((c) => c.checkId)).toEqual(["relocate.contractHonored"]);
   });
 
   it("honestly reports no match without failing the check, when nothing clears the bar", async () => {

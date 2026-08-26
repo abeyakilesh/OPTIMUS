@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Broker } from "../../kernel/broker";
+import { ARTIFACT_ID_OUTPUT } from "../../kernel/outputContract";
 import { Harness } from "../../kernel/harness";
 import { MemoryArtifactStore } from "../../kernel/artifacts";
 import type { Capability, Check, StepSpec } from "../../kernel/types";
@@ -27,6 +28,7 @@ const repeater: Capability = {
     permissions: [],
     isolation: {},
     inputConstraints: {},
+    outputs: { artifactId: ARTIFACT_ID_OUTPUT },
     defaultBudget: { maxAttempts: 1, maxWallTimeMs: 2_000, maxCost: 5 },
     description: "stores a constant body and returns its artifact id",
   },
