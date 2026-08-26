@@ -261,6 +261,15 @@ export class Harness {
       // come from inside the loop.
       this.deps.broker.validateInput(manifest.id, action.input);
       const output = await capability.run(action.input, context);
+      // Gate 8, fourth leg — the same door, on the way out. A capability whose
+      // return value has drifted from its own manifest fails HERE, naming the
+      // field, rather than downstream where a later step's `$from` reference
+      // resolves to undefined and the mission carries on.
+      //
+      // Before the checks, deliberately: this is the contract's question, and
+      // a check answering the mission's question on a malformed value would
+      // report the wrong reason.
+      this.deps.broker.validateOutput(manifest.id, output);
       return { ok: true, output, durationMs: this.now() - began, cost: 1 };
     } catch (error) {
       // A permission denial arrives here like any other failure: the step

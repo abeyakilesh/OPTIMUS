@@ -10,6 +10,7 @@
  */
 
 import type { Capability, Check, CheckResult } from "../types";
+import { ARTIFACT_ID_OUTPUT, type OutputConstraint } from "../outputContract";
 import type { Repair } from "../harness";
 import { bestMatch, elementToDict, type ElementFingerprint } from "../scrapling";
 
@@ -30,6 +31,28 @@ export interface RelocateOutput {
 }
 
 const DEFAULT_PERCENTAGE = 40;
+
+/**
+ * The fingerprint shape as it comes BACK. Deliberately its own constant rather
+ * than a reference to the input constraint above: the two differ in exactly
+ * one way — nothing here is `required`, because `elementToDict` omits the
+ * parent/sibling/child keys for an element with no element parent — and a
+ * shared definition would hide that difference behind a spread.
+ */
+const FINGERPRINT_SHAPE: OutputConstraint = {
+  kind: "object",
+  fields: {
+    tag: { kind: "string", required: true },
+    attributes: { kind: "record", required: true, values: { kind: "string" } },
+    text: { kind: "string", required: true, nullable: true },
+    path: { kind: "array", required: true, of: { kind: "string" } },
+    parentName: { kind: "string" },
+    parentAttribs: { kind: "record", values: { kind: "string" } },
+    parentText: { kind: "string", nullable: true },
+    siblings: { kind: "array", of: { kind: "string" } },
+    children: { kind: "array", of: { kind: "string" } },
+  },
+};
 
 /**
  * No fs/net permissions: this capability computes over HTML the caller
@@ -67,6 +90,20 @@ export const scraplingRelocate: Capability = {
       },
       pageHtml: { kind: "string", required: true, maxLength: 50_000_000 },
       percentage: { kind: "number", min: 0, max: 100 },
+    },
+    // `matches` is a list of the SAME fingerprint shape the input takes, so
+    // the declaration is the input's field-for-field, minus the required
+    // marks: `elementToDict` omits the parent/sibling/child keys entirely when
+    // the element has no element parent, and an omitted key is absent, not
+    // null. Declaring them required would fail every root-level match.
+    outputs: {
+      found: { kind: "boolean", required: true },
+      // 0-100 by construction: the port accumulates one 0..1 term per check
+      // and divides by the number of checks (kernel/scrapling.ts).
+      score: { kind: "number", required: true, min: 0, max: 100 },
+      percentage: { kind: "number", required: true, min: 0, max: 100 },
+      matches: { kind: "array", required: true, of: FINGERPRINT_SHAPE },
+      artifactId: ARTIFACT_ID_OUTPUT,
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 5000, maxCost: 5 },
     description:

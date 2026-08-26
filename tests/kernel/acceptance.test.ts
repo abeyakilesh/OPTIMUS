@@ -83,13 +83,22 @@ describe("WP-001 acceptance criteria", () => {
 
       // Same capability, but it corrupts the title on the way out — exactly
       // the "looks like it worked" failure a model would happily report.
+      //
+      // The corruption is WELL-FORMED on purpose, and this is the second time
+      // that has had to be said here. It used to return
+      // `{ title: "", artifactId: undefined }`, which stopped reaching the
+      // check the moment the output contract landed (#66) — the same drift the
+      // input-constraint note below records, one door further along. The two
+      // assertions at the bottom are what caught it both times: they name
+      // WHICH check blocked, so a step that starts failing somewhere else goes
+      // red instead of quietly passing for a new reason.
       const sabotaged: Capability = {
         manifest: {
           ...htmlExtractTitle.manifest,
           id: "html.extractTitle.sabotaged",
         },
-        async run() {
-          return { title: "", artifactId: undefined };
+        async run(_input, ctx) {
+          return { title: "", artifactId: await ctx.putArtifact("") };
         },
       };
       broker.register(sabotaged);
@@ -132,6 +141,11 @@ describe("WP-001 acceptance criteria", () => {
       // assertions above were all still true.
       const failed = checks.filter((c) => !c.passed).map((c) => c.checkId);
       expect(failed, "the declared checks must be what blocked this").toContain("title.nonEmpty");
+      // `capability.completed` is the harness's stand-in for "the capability
+      // never returned cleanly" — a permission denial, a throw, a refused
+      // input, and now a refused OUTPUT all surface under it. Seeing it here
+      // means something stopped the step before verification ran, which is a
+      // different guarantee than the one this test is about.
       expect(failed).not.toContain("capability.completed");
     });
 
@@ -193,6 +207,7 @@ describe("WP-001 acceptance criteria", () => {
         permissions: ["net:read"], // note: NO fs:write
         isolation: { allowedHosts: ["example.test"] },
         inputConstraints: {},
+        outputs: { ok: { kind: "boolean", required: true } },
         defaultBudget: { maxAttempts: 1, maxWallTimeMs: 5000, maxCost: 5 },
         description: "Fetches, then tries to write a file it never declared.",
       },
@@ -239,6 +254,7 @@ describe("WP-001 acceptance criteria", () => {
           // found it honestly: before `nudge` was declared, the step stopped
           // after 1 invocation instead of 3.
           inputConstraints: { nudge: { kind: "number", min: 0, max: 1 } },
+          outputs: { title: { kind: "string", required: true } },
           defaultBudget: { maxAttempts: 3, maxWallTimeMs: 10_000, maxCost: 100 },
           description: "Returns an empty title forever.",
         },
@@ -283,6 +299,7 @@ describe("WP-001 acceptance criteria", () => {
           version: "1.0.0",
           permissions: [],
           inputConstraints: {},
+          outputs: { title: { kind: "string", required: true } },
           defaultBudget: { maxAttempts: 100, maxWallTimeMs: 1000, maxCost: 1000 },
           description: "Never satisfies its check.",
         },
@@ -322,6 +339,7 @@ describe("WP-001 acceptance criteria", () => {
           permissions: [],
           // Each attempt costs 1; allow 2 before the ceiling bites.
           inputConstraints: {},
+          outputs: { title: { kind: "string", required: true } },
           defaultBudget: { maxAttempts: 50, maxWallTimeMs: 60_000, maxCost: 2 },
           description: "Never satisfies its check.",
         },
@@ -357,6 +375,7 @@ describe("WP-001 acceptance criteria", () => {
             version: "1.0.0",
             permissions: [],
             inputConstraints: {},
+            outputs: {},
             defaultBudget: { maxAttempts: 0, maxWallTimeMs: 1000, maxCost: 1 },
             description: "zero attempts is not a budget",
           },

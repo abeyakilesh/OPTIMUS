@@ -30,11 +30,24 @@ const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
 const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
 const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
 
-/** Corrupts the extracted title — a capability that lies about its result. */
+/**
+ * Corrupts the extracted title — a capability that lies about its result.
+ *
+ * The lie is WELL-FORMED, and that is the whole point of the demo: this is a
+ * capability whose output satisfies its own manifest and is still wrong, so
+ * the only thing standing between it and a green mission is a real check.
+ *
+ * It used to return `{ title: "", artifactId: undefined }`, which stopped
+ * demonstrating that the moment the output contract landed (#66) — the run
+ * still went red, and the reason printed became "output does not match its
+ * declared outputs" from a door two layers earlier than verification. Same
+ * drift AC-3 has now recorded twice; found here by running the demo, because
+ * `kernel/cli.ts` has no CI coverage at all (PR B).
+ */
 const sabotagedExtract: Capability = {
   manifest: { ...htmlExtractTitle.manifest, id: "html.extractTitle" },
-  async run() {
-    return { title: "", artifactId: undefined };
+  async run(_input, ctx) {
+    return { title: "", artifactId: await ctx.putArtifact("") };
   },
 };
 

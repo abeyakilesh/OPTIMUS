@@ -370,7 +370,7 @@ function checkFields(
   for (const key of Object.keys(value)) {
     if (out.length >= MAX_VIOLATIONS) return;
     if (!own(constraints, key)) {
-      out.push(`${at}.${key}: undeclared field — this capability's manifest does not accept it`);
+      out.push(`${at}.${key}: undeclared field — this capability's manifest does not declare it`);
     }
   }
   for (const field of Object.keys(constraints)) {
@@ -400,19 +400,26 @@ function typeName(value: unknown): string {
  * fine. Returning the list rather than throwing keeps the caller in charge of
  * how a refusal is reported — the harness turns it into a failed observation,
  * the same shape a permission denial already arrives in.
+ *
+ * `root` names what is being checked, and it is a parameter rather than the
+ * hardcoded "input" because `outputContract.ts` reuses this engine on the way
+ * OUT. A violation in a capability's return value that reads `input.title:
+ * required field is missing` sends the reader to the wrong end of the step —
+ * `mislabelled-failure-reason`, found by this file's own output-door tests
+ * before it shipped (#66).
  */
-export function checkInput(constraints: InputConstraints, input: unknown): string[] {
+export function checkInput(constraints: InputConstraints, input: unknown, root = "input"): string[] {
   const out: string[] = [];
   if (input === undefined || input === null) {
     // `{}` is the correct input for a capability that takes none.
     if (Object.keys(constraints).length === 0) return out;
-    out.push("input: expected an object, got " + typeName(input ?? null));
+    out.push(`${root}: expected an object, got ` + typeName(input ?? null));
     return out;
   }
   if (!isPlainObject(input)) {
-    out.push(`input: expected an object, got ${typeName(input)}`);
+    out.push(`${root}: expected an object, got ${typeName(input)}`);
     return out;
   }
-  checkFields(constraints, input, "input", 1, out);
+  checkFields(constraints, input, root, 1, out);
   return out;
 }

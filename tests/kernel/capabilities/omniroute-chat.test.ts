@@ -21,7 +21,7 @@ import { describe, it, expect } from "vitest";
 import { Broker } from "../../../kernel/broker";
 import { Harness } from "../../../kernel/harness";
 import { MemoryArtifactStore } from "../../../kernel/artifacts";
-import type { Capability } from "../../../kernel/types";
+import type { Capability, CheckContext } from "../../../kernel/types";
 import { llmChat, llmChatSucceeded, type LlmChatOutput } from "../../../kernel/capabilities/omniroute/chat";
 
 const BASE_URL = process.env.OPTIMUS_TEST_OMNIROUTE_BASE_URL ?? "http://127.0.0.1:20128";
@@ -159,6 +159,19 @@ describe("llm.chatSucceeded — check logic, isolated from real network calls", 
         // real one would make this fake fail at the manifest door and
         // never reach the check these tests exist to exercise.
         inputConstraints: {},
+        // The same reasoning at the OUTPUT door (#66). The stub never stores
+        // an artifact, so it does not promise an `artifactId`; every other
+        // field is the real manifest's. Loosened by exactly one field, so a
+        // canned output that is genuinely the wrong SHAPE still fails here
+        // rather than reaching the check under false pretenses.
+        outputs: {
+          ok: { kind: "boolean", required: true },
+          status: { kind: "number", required: true, integer: true, min: 0 },
+          model: { kind: "string" },
+          content: { kind: "string" },
+          error: { kind: "string" },
+          artifactId: { kind: "string" },
+        },
       },
       async run() {
         return fakeOutput;
@@ -192,10 +205,28 @@ describe("llm.chatSucceeded — check logic, isolated from real network calls", 
     expect(outcome.status).toBe("passed");
   });
 
-  it("fails malformed output instead of crashing", async () => {
+  /**
+   * Malformed output used to be one test through the harness. It is two now,
+   * because #66 gave the harness an output door and the single test would have
+   * gone on passing for a reason that had nothing to do with the check —
+   * exactly the drift AC-3 records twice. Both halves are real guarantees and
+   * they belong to different subjects, so they are asserted separately.
+   */
+  it("the OUTPUT DOOR refuses a capability that returns nothing at all", async () => {
     const outcome = await runFakeCapability(undefined);
     expect(outcome.status).not.toBe("passed");
-    expect(outcome.evidence.checks[0].reason).toMatch(/did not succeed/);
+    expect(outcome.evidence.checks.map((c) => c.checkId)).toEqual(["capability.completed"]);
+    expect(outcome.evidence.checks[0].reason).toMatch(/output does not match its declared outputs/);
+  });
+
+  it("the CHECK itself fails malformed output instead of crashing", async () => {
+    // Called directly: the harness can no longer deliver a malformed value to
+    // a check, but `Check.run` still takes `unknown` and every check must
+    // survive one. A check that throws on a shape it did not expect turns a
+    // verdict into a crash.
+    const result = await llmChatSucceeded.run(undefined, {} as CheckContext);
+    expect(result.passed).toBe(false);
+    expect(result.reason).toMatch(/did not succeed/);
   });
 });
 

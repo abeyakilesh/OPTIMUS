@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **77 classes · 65 with a real detection mechanism · 12 UNDETECTED**
+> **78 classes · 66 with a real detection mechanism · 12 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -167,13 +167,27 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** A test stays green when the thing it names is deleted — it is testing something else.
 
-**Instances:** PR #36 (`never opens a socket` passed with `validateInput` **removed**; K4 already blocked the socket); PR #36 (AC-3's `input: {}` began failing at the **manifest door** instead of at the check — still red, still passing, no longer testing verification); PR #53/#57 (the absorption guard's file-based checks: every test left `BASE_SHA` unset, so `changed` was `[]` and `.some()` never ran its callback — the path stayed dead through **both the fix and the test written to prove the fix**); PR #18 (two mutations *looked* caught; one was caught by a second guard, the other by the harness's own exception net); PR #15 (an autojunk fixture purged a character absent from the other sequence, so the purge had zero observable effect).
+**Instances:** PR #36 (`never opens a socket` passed with `validateInput` **removed**; K4 already blocked the socket); PR #36 (AC-3's `input: {}` began failing at the **manifest door** instead of at the check — still red, still passing, no longer testing verification); PR #66 (the same thing to the same test one door later, plus the `fail` demo in `kernel/cli.ts` and three check-logic suites — see `new-door-inherits-old-failures`, where this instance is recorded in full); PR #53/#57 (the absorption guard's file-based checks: every test left `BASE_SHA` unset, so `changed` was `[]` and `.some()` never ran its callback — the path stayed dead through **both the fix and the test written to prove the fix**); PR #18 (two mutations *looked* caught; one was caught by a second guard, the other by the harness's own exception net); PR #15 (an autojunk fixture purged a character absent from the other sequence, so the purge had zero observable effect).
 
 **Why it survived:** Green is indistinguishable from relevant. Running a test is not the same as exercising it.
 
 **Detection:** **UNDETECTED as a gate** — mutation testing is the mechanism and no runner is wired. PR checklist item: *every new test was run against a broken subject and observed to fail*.
 
 **Rule:** A test must be shown to fail when its subject is removed, or it is not yet a test. (THE MUTATION RULE)
+
+---
+
+### `new-door-inherits-old-failures`
+
+**Looks like:** A new validation layer is added UPSTREAM of an existing one. Every test that was proving the downstream layer blocks something keeps failing — so it stays green — but the refusal now comes from the new door, and the test has stopped exercising its subject. Uniquely nasty because the tests never go red: there is no moment where anyone is asked to look.
+
+**Instances:** PR #36 added the input contract and AC-3's sabotage began failing at the manifest door instead of at `title.nonEmpty` (recorded under `test-passes-without-subject` too — one event, two sides). PR #66 added the output contract and did it **three more times in one commit**: (1) AC-3 again — its sabotage returned `artifactId: undefined`, which the new door refuses, so the *second* time this exact test has been captured by a *different* door; (2) `kernel/cli.ts`'s `npm run mission fail` demo, whose entire purpose is showing verification block a lie, started printing `capability.completed — output does not match its declared outputs` instead of `title.nonEmpty — expected a non-empty title`; (3) the `.fake` check-logic suites in `omniroute-chat`, `browser-use-navigate` and `scrapling-capability`, whose canned outputs used placeholder values (`artifactId: "x"`, a one-field fingerprint) the real manifests correctly refuse.
+
+**Why it survived:** Adding a door feels like pure addition — nothing is deleted, nothing goes red, CI is green in both directions. The failing assertion is usually `expect(status).not.toBe("passed")`, which is true no matter which layer refused. And the person adding the door is thinking about the door, not about which existing tests were relying on getting past it. Note that (1) and (2) are the SAME sabotage: it was fixed once in the test and left unfixed in the demo, because only one of the two has any CI coverage at all.
+
+**Detection:** `tests/kernel/acceptance.test.ts` :: AC-3 asserts `failed` contains `title.nonEmpty` and NOT `capability.completed` — that pair is what caught instance (1) in both PRs, and it is the generalisable form: **name which gate blocked, never merely that something did**; `tests/kernel/output-contract.test.ts` :: asserts the contract violation is reported instead of the check verdict when both would fail; `tests/kernel/scrapling-capability.test.ts` and `tests/kernel/capabilities/omniroute-chat.test.ts` :: the check-logic suites now assert `checks.map(c => c.checkId)` equals the declared check. **Partial** — instance (2) was found by running the demo by hand, because `kernel/cli.ts` has no CI coverage (scheduled for PR B).
+
+**Rule:** A test that asserts a failure must name WHICH gate produced it. Adding a validation layer is not a pure addition: every test asserting a refusal downstream of it has to be re-read.
 
 ---
 
@@ -221,11 +235,11 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** A TypeScript type predicate (`function f(v: unknown): v is T`) validates fewer fields than `T` declares. The compiler takes the signature at its word, so every downstream use is typed on a claim nothing verified — and `tsc` stays green precisely where it should have caught the gap.
 
-**Instances:** PR #65 — adding a required `trust` field to `LlmChatMessage` should have broken `app/api/missions/route.ts`, which builds `LlmChatMessage[]` from an HTTP body. `tsc --noEmit` exited **0**. The cause was `isValidMessages(value: unknown): value is LlmChatMessage[]`, which checked `role` and `content` and nothing else: the predicate asserted the new field into existence. Untagged messages would have reached the broker and been refused at runtime with a 503 rather than a 400 — and had the manifest field been optional, they would have reached the model.
+**Instances:** PR #65 — adding a required `trust` field to `LlmChatMessage` should have broken `app/api/missions/route.ts`, which builds `LlmChatMessage[]` from an HTTP body. `tsc --noEmit` exited **0**. The cause was `isValidMessages(value: unknown): value is LlmChatMessage[]`, which checked `role` and `content` and nothing else: the predicate asserted the new field into existence. Untagged messages would have reached the broker and been refused at runtime with a 503 rather than a 400 — and had the manifest field been optional, they would have reached the model. PR #66 — the sweep #65 asked for. `looksLikeCapability(value: unknown): value is Capability` in `tests/kernel/registry.test.ts` checked `manifest?.id` and `typeof run === "function"`: **six manifest fields asserted, one examined**, in the predicate the registry-completeness test uses to decide what counts as a capability. Adding required `outputs` to the manifest would have widened the gap silently.
 
 **Why it survived:** A predicate is the one place TypeScript deliberately stops checking and defers to the author, and it looks like validation while being an assertion. The failure is also invisible in the direction people test: the predicate correctly rejects malformed input, so its tests pass. What it silently *accepts* is the type claim itself, and nothing exercises that.
 
-**Detection:** `lib/missions/clientMessages.ts` :: the predicate now narrows to a `ClientMessage` type it fully checks, and the kernel-side type is produced by `asOperatorMessages` rather than asserted; `tests/kernel/message-provenance.test.ts` :: asserts the boundary refuses client-supplied provenance. **Partial** — this fixes the instance, not the class: any other `v is T` in the codebase can drift the same way and nothing sweeps for it.
+**Detection:** `lib/missions/clientMessages.ts` :: the predicate narrows to a `ClientMessage` type it fully checks, and the kernel-side type is produced by `asOperatorMessages` rather than asserted; `tests/kernel/message-provenance.test.ts` :: asserts the boundary refuses client-supplied provenance; `tests/kernel/registry.test.ts` :: `MANIFEST_FIELD_PRESENT` is typed `Record<RequiredKeys<CapabilityManifest>, …>`, so adding a required field to the manifest fails `tsc` until a check for it exists, and an `it.each` over the same list deletes each field and requires a rejection. **Still partial, and the limit is now a measured one rather than an unexamined one.** The repo has **11** type predicates (PR #66 enumerated them); **3** narrow from `unknown` and only those can assert a field that does not exist — the other 8 narrow within an already-typed union, where the worst available error is mis-selecting a member that is itself fully typed. `tsc` never verifies a predicate's BODY in either case, so nothing general sweeps for this; what exists is a per-predicate mechanism on the one that guards the manifest.
 
 **Rule:** A type predicate must check every field of the type it asserts, or narrow to a smaller type it does check.
 
@@ -813,11 +827,11 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** A failure is reported under the wrong category, hiding the real verdict.
 
-**Instances:** PR #13 — the harness reported `budget-exhausted` for a step that simply failed its check on its only permitted attempt. Nothing had run away; the label hid the real reason. PR #62 — `defect-registry.mjs --update` exited 1 with *"Could not find a coverage line to update"* when the line was present **and already correct**: "no change" and "no such line" shared one exit path, so a no-op reported a structural fault. Fixed by testing for the line's existence separately from whether the replacement changed anything.
+**Instances:** PR #66 — `checkOutput` reuses the input contract's engine, which hardcoded the path prefix `"input"`, so a capability whose RETURN value violated its manifest was told `input.artifactId: required field is missing`. Both ends of a step are being validated by then, and the message sent the reader to the wrong one. Caught by the output door's own tests before it shipped; fixed by making the root label a parameter. PR #13 — the harness reported `budget-exhausted` for a step that simply failed its check on its only permitted attempt. Nothing had run away; the label hid the real reason. PR #62 — `defect-registry.mjs --update` exited 1 with *"Could not find a coverage line to update"* when the line was present **and already correct**: "no change" and "no such line" shared one exit path, so a no-op reported a structural fault. Fixed by testing for the line's existence separately from whether the replacement changed anything.
 
 **Why it survived:** Both are failures, so the step was red either way and nobody read further.
 
-**Detection:** `kernel/harness.ts` :: distinguishes giving up from running out of road; AC-4 asserts each budget terminates for its own reason
+**Detection:** `kernel/harness.ts` :: distinguishes giving up from running out of road; AC-4 asserts each budget terminates for its own reason; `kernel/outputContract.ts` :: passes an explicit `"output"` root to the shared constraint engine, and `tests/kernel/output-contract.test.ts` asserts the violation names the output end
 
 ---
 
