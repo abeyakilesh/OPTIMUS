@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **78 classes · 66 with a real detection mechanism · 12 UNDETECTED**
+> **79 classes · 67 with a real detection mechanism · 12 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -181,13 +181,17 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** A new validation layer is added UPSTREAM of an existing one. Every test that was proving the downstream layer blocks something keeps failing — so it stays green — but the refusal now comes from the new door, and the test has stopped exercising its subject. Uniquely nasty because the tests never go red: there is no moment where anyone is asked to look.
 
-**Instances:** PR #36 added the input contract and AC-3's sabotage began failing at the manifest door instead of at `title.nonEmpty` (recorded under `test-passes-without-subject` too — one event, two sides). PR #66 added the output contract and did it **three more times in one commit**: (1) AC-3 again — its sabotage returned `artifactId: undefined`, which the new door refuses, so the *second* time this exact test has been captured by a *different* door; (2) `kernel/cli.ts`'s `npm run mission fail` demo, whose entire purpose is showing verification block a lie, started printing `capability.completed — output does not match its declared outputs` instead of `title.nonEmpty — expected a non-empty title`; (3) the `.fake` check-logic suites in `omniroute-chat`, `browser-use-navigate` and `scrapling-capability`, whose canned outputs used placeholder values (`artifactId: "x"`, a one-field fingerprint) the real manifests correctly refuse.
+**Instances:** PR #36 added the input contract and AC-3's sabotage began failing at the manifest door instead of at `title.nonEmpty` (recorded under `test-passes-without-subject` too — one event, two sides). PR #66 added the output contract and did it **three more times in one commit**: (1) AC-3 again — its sabotage returned `artifactId: undefined`, which the new door refuses, so the *second* time this exact test has been captured by a *different* door; (2) `kernel/cli.ts`'s `npm run mission fail` demo, whose entire purpose is showing verification block a lie, started printing `capability.completed — output does not match its declared outputs` instead of `title.nonEmpty — expected a non-empty title`; (3) the `.fake` check-logic suites in `omniroute-chat`, `browser-use-navigate` and `scrapling-capability`, whose canned outputs used placeholder values (`artifactId: "x"`, a one-field fingerprint) the real manifests correctly refuse. PR #68 found **three more that #66 had captured and nobody noticed**, all in `tests/kernel/evidence-artifacts.test.ts`: `test.nested` and `test.noisy` inherited the repeater's `outputs` declaration, failed at the output door, and kept passing — one because the capability had already written its artifact before the door refused, the other because its only assertion was `producedArtifactIds).toEqual([])`, which a step that never ran satisfies perfectly.
 
 **Why it survived:** Adding a door feels like pure addition — nothing is deleted, nothing goes red, CI is green in both directions. The failing assertion is usually `expect(status).not.toBe("passed")`, which is true no matter which layer refused. And the person adding the door is thinking about the door, not about which existing tests were relying on getting past it. Note that (1) and (2) are the SAME sabotage: it was fixed once in the test and left unfixed in the demo, because only one of the two has any CI coverage at all.
 
-**Detection:** `tests/kernel/acceptance.test.ts` :: AC-3 asserts `failed` contains `title.nonEmpty` and NOT `capability.completed` — that pair is what caught instance (1) in both PRs, and it is the generalisable form: **name which gate blocked, never merely that something did**; `tests/kernel/output-contract.test.ts` :: asserts the contract violation is reported instead of the check verdict when both would fail; `tests/kernel/scrapling-capability.test.ts` and `tests/kernel/capabilities/omniroute-chat.test.ts` :: the check-logic suites now assert `checks.map(c => c.checkId)` equals the declared check. **Partial** — instance (2) was found by running the demo by hand, because `kernel/cli.ts` has no CI coverage (scheduled for PR B).
+The #68 instances add a second, sharper reason, worth stating on its own: **an assertion that a result is EMPTY cannot distinguish "correctly nothing" from "nothing ran".** `expect(ids).toEqual([])` is the most passive assertion a test can make, and it is satisfied by every failure mode upstream of the code it is about.
 
-**Rule:** A test that asserts a failure must name WHICH gate produced it. Adding a validation layer is not a pure addition: every test asserting a refusal downstream of it has to be re-read.
+**Detection:** `tests/kernel/cli-demo.test.ts` :: runs both CLI demos for real and asserts the `fail` demo is blocked by `title.nonEmpty` and NOT by `capability.completed`, the output door, or an unresolvable input — closing instance (2), which had no CI coverage at all; `tests/kernel/acceptance.test.ts` :: AC-3 asserts `failed` contains `title.nonEmpty` and NOT `capability.completed` — that pair is what caught instance (1) in both PRs, and it is the generalisable form: **name which gate blocked, never merely that something did**; `tests/kernel/output-contract.test.ts` :: asserts the contract violation is reported instead of the check verdict when both would fail; `tests/kernel/evidence-artifacts.test.ts` :: every emptiness assertion is now paired with `expect(outcome.status).toBe("passed")`; `tests/kernel/scrapling-capability.test.ts` and `tests/kernel/capabilities/omniroute-chat.test.ts` :: the check-logic suites assert `checks.map(c => c.checkId)` equals the declared check. **Partial** — every mechanism is per-test. Nothing detects the class in general; the sweep above is a procedure, not a gate.
+
+**Rule:** A test that asserts a failure must name WHICH gate produced it, and a test that asserts an empty result must also assert that the work ran. Adding a validation layer is not a pure addition: every test asserting a refusal downstream of it has to be re-read.
+
+**How to sweep for it,** because "re-read every test" is not a method: instrument the NEW door to print on every refusal, run the whole suite, and read the list. PR #68 did this for #66's output door — six firings, all intentional, three days after three unintentional ones had already been found by hand. It takes two minutes and it is exhaustive; hand-auditing is neither.
 
 ---
 
@@ -820,6 +824,20 @@ name a tracking issue or a reason it cannot be automated.
 **Why it survived:** The loop was added minutes earlier *to fix* a swallowed error, and swallowed it differently.
 
 **Detection:** `.github/workflows/_ai-review.yml` :: redirects to a file instead of piping
+
+---
+
+### `error-path-discards-evidence`
+
+**Looks like:** A failure travels by a route that bypasses the mechanism which records what happened, so the run produces no trace at all — strictly less than a run that failed and said why.
+
+**Instances:** PR #68 — an unresolvable `$from` reference threw a `PlanReferenceError` out of `Scheduler.execute`. The rejection propagated through `Promise.race` to `Scheduler.run`, which therefore never returned a `MissionResult` — **discarding the entire event log**, including sealed evidence for every step that had already passed. The kernel's own rule is that a step "fails HONESTLY with its evidence attached"; this failed by crashing the recorder. Found by the feature's own mutation test, which expected a red mission and got a rejected promise.
+
+**Why it survived:** Throwing is the correct reflex for an invariant violation, and it *is* correct for the kernel-level contract break this represents — the mistake is in WHERE it lands, not in refusing. From inside `execute`, "throw" and "fail this step" look like the same thing; only the caller can tell that one of them destroys the trace. Nothing in the shape of the code says the return value is the only path that preserves the log.
+
+**Detection:** `kernel/harness.ts` :: `failBeforeRun` seals real evidence for a step that could not be started, so the scheduler has something to emit instead of throwing; `tests/kernel/references.test.ts` :: the mutation test asserts the mission stays red AND that the already-passed step is still in the folded state.
+
+**Rule:** A failure inside the execution loop is a failed STEP with evidence, never an exception out of the mission. Anything that can throw past the recorder has to be caught by the thing that owns the record.
 
 ---
 

@@ -66,7 +66,11 @@ function skeletonMission(): MissionSpec {
       {
         id: "extract",
         capabilityId: "html.extractTitle",
-        input: { artifactId: addressOf(FIXTURE_HTML) },
+        // The other half of facade #2 (#68). AC-1 passed for the same wrong
+        // reason as the CLI demo: this was `addressOf(FIXTURE_HTML)`, a
+        // constant that happened to equal what `fetch` would produce, so the
+        // dependency edge carried nothing. See "the edge is not decorative".
+        input: { artifactId: { $from: "fetch.artifactId" } },
         dependsOn: ["fetch"],
         checks: ["title.nonEmpty", "artifact.intact"],
       },
@@ -185,6 +189,23 @@ describe("WP-001 acceptance criteria", () => {
     const titleArtifact = result.state.steps.extract.evidence?.artifactIds.at(-1);
     expect(titleArtifact).toBe(addressOf(EXPECTED_TITLE));
     expect(await store.get(titleArtifact!)).toBe(EXPECTED_TITLE);
+
+    // The edge carried the value. Until #68 this criterion was satisfiable by
+    // two independent steps that happened to agree, because `extract`'s input
+    // was a constant computed in this file — so AC-1 could not tell a pipeline
+    // from a coincidence.
+    //
+    // This asserts the mechanism is present. The assertion that the edge is
+    // LOAD-BEARING lives in tests/kernel/references.test.ts, where a different
+    // upstream page is required to produce a different downstream title —
+    // deliberately there and not duplicated here, because two copies of one
+    // proof diverge (`stale-duplicate`).
+    expect(
+      result.log.all().filter((e) => e.type === "step.resolved"),
+      "extract's input must be resolved from fetch, not hardcoded",
+    ).toMatchObject([
+      { stepId: "extract", resolved: [{ from: "fetch.artifactId" }] },
+    ]);
   });
 
   /* ── AC-2 · the permission boundary refuses undeclared access ─────────── */

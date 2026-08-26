@@ -61,6 +61,25 @@ export interface StepOutcome {
 export class Harness {
   constructor(private readonly deps: HarnessDeps) {}
 
+  /**
+   * The scheduler needs both of these — the broker to validate a plan's `$from`
+   * references against the capabilities that will actually run it, the store to
+   * read a previous step's output back.
+   *
+   * They are read THROUGH the harness rather than taken again in
+   * `SchedulerDeps`, and that is the point: a scheduler handed its own broker
+   * could validate a plan against one capability set and run it against
+   * another. There is no way to express that disagreement if there is only one
+   * place to get them from.
+   */
+  get broker(): Broker {
+    return this.deps.broker;
+  }
+
+  get store(): ArtifactStore {
+    return this.deps.store;
+  }
+
   private get now(): () => number {
     return this.deps.now ?? Date.now;
   }
@@ -88,6 +107,36 @@ export class Harness {
       outcome.evidence.rolledBack = await restoreTree(before);
     }
     return outcome;
+  }
+
+  /**
+   * Fail a step that could not even be STARTED, with real evidence.
+   *
+   * The scheduler needs this for a `$from` reference it cannot resolve. That
+   * used to throw out of `Scheduler.run`, which meant the mission produced no
+   * MissionResult and **its entire event log was discarded** — every step that
+   * had already passed, with its evidence, gone. Found by this feature's own
+   * mutation test.
+   *
+   * A step that cannot run is a failed step, not a crashed kernel. It arrives
+   * in the same shape as a permission denial or a refused input: red, with the
+   * reason attached, and the rest of the mission's trace intact.
+   */
+  failBeforeRun(spec: StepSpec, checkId: string, reason: string): StepOutcome {
+    const manifest = this.deps.broker.capability(spec.capabilityId).manifest;
+    const startedAt = this.now();
+    return this.seal(
+      "failed",
+      spec,
+      manifest,
+      0,
+      startedAt,
+      0,
+      [],
+      [{ checkId, passed: false, reason }],
+      hashInput(spec.input),
+      reason,
+    );
   }
 
   private async runStepUnprotected(spec: StepSpec, repair?: Repair): Promise<StepOutcome> {
@@ -176,6 +225,11 @@ export class Harness {
         // The capability returned. That is NOT done — run the real checks.
         lastChecks = await this.verify(spec, observation.output);
         if (lastChecks.every((c) => c.passed)) {
+          // Seal the output itself into the store, so a later step's `$from`
+          // reference reads it back from a durable address rather than from
+          // this process's memory. Content-addressed like everything else: two
+          // steps producing identical output share one artifact.
+          const outputArtifactId = await store.put(JSON.stringify(observation.output ?? null));
           return {
             ...this.seal(
               "passed",
@@ -189,6 +243,7 @@ export class Harness {
               inputHash,
               undefined,
               observation.output,
+              outputArtifactId,
             ),
             output: observation.output,
           };
@@ -341,6 +396,7 @@ export class Harness {
     inputHash: string,
     failureReason?: string,
     output?: unknown,
+    outputArtifactId?: string,
   ): StepOutcome {
     const evidence: Evidence = {
       stepId: spec.id,
@@ -354,12 +410,22 @@ export class Harness {
       // Everything the step produced: what it newly wrote, PLUS whatever its
       // output points at. A repeat run whose bytes already exist writes
       // nothing new but has still produced that artifact.
-      producedArtifactIds: [...new Set([...artifactIds, ...Harness.collectArtifactIds(output)])],
+      producedArtifactIds: [
+        ...new Set([
+          ...artifactIds,
+          ...Harness.collectArtifactIds(output),
+          // The sealed output is an artifact this step produced. It is NOT
+          // added to `artifactIds`, which means "what the capability newly
+          // wrote" — the kernel wrote this one, on the step's behalf.
+          ...(outputArtifactId ? [outputArtifactId] : []),
+        ]),
+      ],
       checks:
         failureReason && checks.length === 0
           ? [{ checkId: "budget", passed: false, reason: failureReason }]
           : checks,
       inputHash,
+      ...(outputArtifactId ? { outputArtifactId } : {}),
     };
     return { status, evidence };
   }
