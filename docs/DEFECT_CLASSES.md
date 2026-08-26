@@ -16,8 +16,13 @@ classified.
 
 > **75 classes · 63 with a real detection mechanism · 12 UNDETECTED**
 >
-> Eleven classes have nothing stopping them recurring today, and several of the sixty "detected" are covered by a
-> single test rather than a general mechanism — the count says a check exists, not that the class is solved.
+> The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
+> recurring today. Several of the "detected" are covered by a single test rather than a general
+> mechanism — the count says a check exists, not that the class is solved.
+>
+> Deliberately no numbers in this paragraph. The line above is generated; the first draft of this
+> sentence hand-counted "Eleven" and "sixty" beside it and was stale within two commits
+> (`stale-duplicate`, caught in PR #62).
 > Each UNDETECTED row names either the check that should exist or the issue tracking it; per THE ENFORCEMENT
 > RULE, "we know about it" is not a mechanism.
 >
@@ -38,7 +43,7 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** One fact stored in two places; the copy nobody edits goes stale and is the one people read.
 
-**Instances:** PR #33 (`gauntlet.yml` printed *"gate 10 · isolation invariants | no sandbox"* for a full day after K4 merged, while 24 assertions enforced it); PR #33 (CLAUDE.md said **554** ast-grep rules; the real count is **184**); issue #60 (`MemoryArtifactStore.has()` re-implemented the integrity comparison inline as `addressOf(found) === id` instead of calling `verifyIntegrity` — caught by mutation testing **within the hour**, when stripping verification out of `get()` left that adapter's `has()` still answering correctly off its own private copy of the rule).
+**Instances:** PR #33 (`gauntlet.yml` printed *"gate 10 · isolation invariants | no sandbox"* for a full day after K4 merged, while 24 assertions enforced it); PR #33 (CLAUDE.md said **554** ast-grep rules; the real count is **184**); issue #60 (`MemoryArtifactStore.has()` re-implemented the integrity comparison inline as `addressOf(found) === id` instead of calling `verifyIntegrity` — caught by mutation testing **within the hour**, when stripping verification out of `get()` left that adapter's `has()` still answering correctly off its own private copy of the rule). PR #62 — the paragraph directly beneath the registry's own generated coverage line hand-counted *"Eleven classes"* and *"sixty detected"*; both were stale within two commits, **inside the file whose gate exists to stop exactly this**. Fixed by removing the numbers from the prose rather than re-syncing them.
 
 **Why it survived:** Both copies were correct when written. Nothing tied them together, so editing one never prompted the other.
 
@@ -130,17 +135,17 @@ name a tracking issue or a reason it cannot be automated.
 
 ---
 
-### `absence-claimed-from-narrow-search`
+### `claim-wider-than-evidence-scope`
 
-**Looks like:** A search runs in one scope and its result is reported in a wider one. "I did not find X here" is published as "X does not exist" — and because a negative reads as thorough, nobody re-runs it.
+**Looks like:** Evidence is gathered over one scope and the conclusion is stated over a larger one. A search of one directory becomes "does not exist anywhere"; a sample of one third of a document becomes a characterisation of all of it. The sentence never carries the scope, so the mismatch is invisible once the command has scrolled away.
 
-**Instances:** PR #61 — `OPTIMUS_AUDIT_2026-08-26.md` reported *"no Atlas file, `/roadmap/` directory, or domain files exist anywhere"* on the strength of `find . -iname "*atlas*"` run inside `OPTIMUS/`. One directory up sat **1.28 MB** across three files (`../OPtimus X atlass/`), including an 854-line executable specification with the SKILL.md schema, a source-quality hierarchy and decay clocks. The audit's own recommended next step was *"split the Atlas"*, which it then reported as impossible.
+**Instances:** PR #61 — `OPTIMUS_AUDIT_2026-08-26.md` reported *"no Atlas file, `/roadmap/` directory, or domain files exist anywhere"* on the strength of `find . -iname "*atlas*"` run inside `OPTIMUS/`. One directory up sat **1.28 MB** across three files, and the audit's own recommended next step was *"split the Atlas"*. PR #62 — having read ~35% of `OPTIMUS and ATLAS RAW BRAIN 1.0.txt`, I characterised the remainder as *"a human learning syllabus"* and filed it as skippable. Lines 5954–7832 are a **50-section specification for OPTIMUS's knowledge-acquisition subsystem**, addressed to this repo's build bible by name, whose §49 is titled *"Relationship to the existing OPTIMUS kernel"*. The unread 65% contained the most relevant document in the corpus, and the dismissal was published as a scope-free judgement about the whole file.
 
-**Why it survived:** A negative result has no artifact to check. A positive claim ("this function does X") invites someone to open the function; "X does not exist" invites nothing, and re-running a search to confirm nothing is there feels like wasted work. The scope mismatch is invisible in the sentence — `find .` and "anywhere" read identically once the command has scrolled away.
+**Why it survived:** Both directions of this are self-sealing. A negative result has no artifact anyone can open, so "X does not exist" invites no check. A characterisation ("this is a syllabus") reads as a summary rather than a claim, and summaries are not audited. In both cases the honest sentence — *"in the 35% I read"* — is longer and weaker-sounding than the wrong one, so it loses.
 
-**Detection:** **UNDETECTED** — no gate can know the intended scope of a prose claim. Partially mitigated by `docs/OPERATING_CONTEXT.md` §1, which records where the Atlas actually is so this specific absence cannot be re-derived, and §7, which requires a control query and a coverage fraction before any absence is asserted. That is a document, not a mechanism, and it is written down as such.
+**Detection:** **UNDETECTED** — no gate can know the intended scope of a prose claim. Partially mitigated by `docs/OPERATING_CONTEXT.md` §1 and §1a, which record where the Atlas is and what is actually in it, so these two specific errors cannot be re-derived, and §7, which requires a control query and a coverage fraction before asserting an absence. That is a document, not a mechanism, and it is written down as such.
 
-**Rule:** An absence is a measurement. State the scope you searched and the fraction you covered, or do not state the absence.
+**Rule:** State the scope you covered in the same sentence as the conclusion, or do not state the conclusion. A sample characterises the sample.
 
 ---
 
@@ -572,7 +577,7 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** A measurement is real but of a different quantity than the one being reported.
 
-**Instances:** PR #50 — back-to-back contract runs made a 7B model look **~2× faster** than a 3B. Direct measurement showed near-identical token counts (19 vs 20) and llama3.2 genuinely faster per token (4.7 vs 3.1 tok/s). The first figure was measuring **VRAM eviction**, not inference. Four qwen runs spanned 11.7s–38.8s.
+**Instances:** PR #62 — reported both Atlas files *"~49% duplicate"* from `sort | uniq | wc -l`, which counts distinct **lines**, not duplicated **content**. `RAW BRAIN 1.0` holds 4,608 blank lines, 5,706 `___` separators and 4,955 tree-character lines — **44% of the file is formatting**, and every repeat of `│` scored as duplication. Measured on substantive lines only: **13.6%**. The bad number was then used as a reason not to read the file. PR #50 — back-to-back contract runs made a 7B model look **~2× faster** than a 3B. Direct measurement showed near-identical token counts (19 vs 20) and llama3.2 genuinely faster per token (4.7 vs 3.1 tok/s). The first figure was measuring **VRAM eviction**, not inference. Four qwen runs spanned 11.7s–38.8s.
 
 **Why it survived:** The numbers were reproducible and internally consistent.
 
@@ -780,7 +785,7 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** A failure is reported under the wrong category, hiding the real verdict.
 
-**Instances:** PR #13 — the harness reported `budget-exhausted` for a step that simply failed its check on its only permitted attempt. Nothing had run away; the label hid the real reason.
+**Instances:** PR #13 — the harness reported `budget-exhausted` for a step that simply failed its check on its only permitted attempt. Nothing had run away; the label hid the real reason. PR #62 — `defect-registry.mjs --update` exited 1 with *"Could not find a coverage line to update"* when the line was present **and already correct**: "no change" and "no such line" shared one exit path, so a no-op reported a structural fault. Fixed by testing for the line's existence separately from whether the replacement changed anything.
 
 **Why it survived:** Both are failures, so the step was red either way and nobody read further.
 

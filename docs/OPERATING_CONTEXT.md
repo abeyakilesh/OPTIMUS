@@ -34,11 +34,71 @@ They live **outside this repo**, in the workspace parent:
 
 **Measured, not assumed:**
 
-| File | lines | distinct lines | notes |
+| File | lines | real duplication | notes |
 |---|---:|---:|---|
-| Gemini spec | 854 | — | Dense. Read it whole; it is the only *executable* one |
-| RAW BRAIN 2.0 | 24,324 | 12,111 | **~50% duplicate.** Lines 219–2000 repeat verbatim at 2245–4000. `DOMAIN 15` heading appears **4×** |
-| RAW BRAIN 1.0 | 34,591 | 17,717 | **~49% duplicate.** 59 unique domains, engineering-only |
+| Gemini spec | 854 | none found | Dense, executable. Read it whole |
+| RAW BRAIN 2.0 | 24,324 | block-level, real | Lines 219–2000 repeat **verbatim** at 2245–4000; `DOMAIN 15` appears 4× |
+| RAW BRAIN 1.0 | 34,591 | **13.6%** | **NOT a domain list — see §1a. Contains the 50-section learning spec** |
+
+> **How not to measure duplication.** The first draft of this file reported "~49% duplicate"
+> for both, from `sort | uniq | wc -l`. That counts distinct *lines*, and 1.0 contains 4,608
+> blank lines, 5,706 `___` separators and 4,955 tree-character lines — **44% of the file is
+> formatting.** Measured on substantive lines only (>25 chars, containing letters), real
+> duplication is **13.6%**. The wrong number was then used to justify not reading the file.
+> `measuring-wrong-thing`, committed while auditing for it.
+
+### 1a · RAW BRAIN 1.0 is NOT a syllabus — read from line 5954
+
+**This file was dismissed once, wrongly, and the dismissal cost the most relevant document
+in the corpus.** It was skimmed, its domain trees were pattern-matched to "curriculum for a
+human", and that judgement was applied to the 65% that had not been read.
+
+At **line 5954** it pivots, explicitly:
+
+> *"You have now clarified the real purpose of the Atlas: it is not primarily a curriculum
+> for you. It is the knowledge-and-learning operating layer for OPTIMUS… Your current
+> OPTIMUS Build Bible is already unusually strong on software integration, provenance,
+> verification, sandboxing, budgets, rollback, capability contracts, and proof. What is
+> missing is the equivalent 16-gate discipline for **knowledge acquisition itself**…
+> That should become a first-class OPTIMUS subsystem."*
+
+It is addressed **to this repo's bible, by name**, and what follows is a **50-section
+specification** for the acquisition agent — written before the kernel existed.
+
+| § | Mechanism | Bears on |
+|---|---|---|
+| 1 | **Learning Unit** — 24 required fields incl. confidence, evidence, provenance, last-verified, known limitations | a `Knowledge` type; none exists |
+| 2 | **Knowledge State Machine** — UNKNOWN→…→MASTERED→MONITORED, and MASTERED→**STALE**→REVALIDATING | capability lifecycle |
+| 3 | **Source Discovery** — 13 ranked classes. *"Search snippets are discovery mechanisms, not authoritative evidence"* | the source-tier gap |
+| 4 | **Source Quality Scoring** — HIGH/MEDIUM/LOW/**UNKNOWN**. *"Do not hide uncertainty"* | THE COUNTING RULE |
+| 6 | **Conflict Resolution** — never silently pick a side; emit a KNOWLEDGE CONFLICT record | — |
+| 13 | **Sandbox Requirement** — SAFE LOCAL / ISOLATED SANDBOX / EPHEMERAL / AUTHORIZED TARGET / **HUMAN APPROVAL** | K4 isolation levels |
+| 14 | **Seven Verification Types** A–G (logical→documentation→source→experimental→benchmark→production→consensus). *"Do not claim stronger evidence than actually exists"* | `CheckResult` has **no** verification type |
+| 17 | **Prediction Test** — PREDICTION→EXPERIMENT→OBSERVATION→**DELTA**, track repeated failures | — |
+| 20 | **Unknown-Unknown Discovery** — mandatory, not optional | — |
+| 28/29 | **Skill Extraction + Revalidation** — *"Never allow an old successful run to permanently prove a changing capability"* | the flywheel |
+| 30 | **Knowledge Provenance** — must answer *"Why do you believe this?"* | — |
+| 31 | **Knowledge Decay** — STABLE→VOLATILE (this is where the decay clock originates) | `qualified.json` |
+| 32 | **Self-Evolution Loop** — *"a concrete executable task. Not a vague recommendation"* | — |
+| 33 | **Learning Task Contract** — *"No autonomous learning task without a budget and stopping condition"* | `Budget` |
+| 34/35 | **Agent Role Separation** — RESEARCHER/EXTRACTOR/TEACHER/IMPLEMENTER/EXPERIMENTER/CRITIC/VERIFIER/CURATOR/ARCHIVIST. *"Do not let one agent automatically approve its own claims"* | see §4 on the `agent` field |
+| 43 | **False Confidence Detection** — names *"tests that test only output shape"* and *"tests that merely reproduce the implementation"* | independently = the assertion rule + THE MUTATION RULE |
+| 44 | **Stop Conditions** — *"FAIL HONESTLY + SAVE PROGRESS. Never convert incomplete work into COMPLETE"* | budget exhaustion |
+| 49 | **Relationship to the existing kernel** | **read this before designing anything** |
+| 50 | The core principle | — |
+
+**Section 49 is the load-bearing one:**
+
+> *"Do not create a second disconnected architecture. The learning system must reuse the
+> same kernel principles already established for OPTIMUS: capability manifests · permission
+> boundaries · sandboxing · artifact graph · scheduler · verification spine · budgets ·
+> provenance · rollback · evidence · reusable skills · reproducibility · version pinning ·
+> failure handling. **Learning is another workload executed by the same system. Do not build
+> 'Learning OPTIMUS' separately from OPTIMUS.**"*
+
+Sections 1–50 run roughly **lines 6022–7832**. Read them before proposing any knowledge,
+memory, research or skill subsystem. They are not curriculum; they are a design brief that
+already agrees with this kernel.
 
 ### ⚠️ Four incompatible numbering schemes
 
@@ -75,9 +135,12 @@ Correct: 2.0 D102.3 · 2.0 D18.15 · 1.0 D57.
 | Artifact catalogue (~300 types) | 1.0 lines 12081–12400 |
 | Capability use-case schema | 1.0 line 12076 |
 
-**Skip without guilt:** the curriculum domains (SQL indexing, Kubernetes objects, career
-development, SaaS metrics). They are a learning syllabus for a human engineer, not a spec
-for this codebase.
+**Safe to skim:** the *domain-tree* portions covering SQL indexing, Kubernetes objects,
+career development and SaaS metrics. Those genuinely are a human syllabus.
+
+**Never skip on that basis:** 1.0 lines 5954–7832 (§1a above) and the Gemini spec. The
+lesson from getting this wrong once — a document's least relevant section is not evidence
+about its most relevant one, and "I sampled it" is not "I read it".
 
 ---
 
