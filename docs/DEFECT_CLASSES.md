@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **74 classes · 63 with a real detection mechanism · 11 UNDETECTED**
+> **75 classes · 63 with a real detection mechanism · 12 UNDETECTED**
 >
 > Eleven classes have nothing stopping them recurring today, and several of the sixty "detected" are covered by a
 > single test rather than a general mechanism — the count says a check exists, not that the class is solved.
@@ -127,6 +127,20 @@ name a tracking issue or a reason it cannot be automated.
 **Detection:** `tests/e2e/providers.spec.ts` :: asserts the word *routable* cannot return and the advertised≠reachable caveat is present
 
 **Rule:** A count is measured, or it is labelled advertised. Where they disagree, show both.
+
+---
+
+### `absence-claimed-from-narrow-search`
+
+**Looks like:** A search runs in one scope and its result is reported in a wider one. "I did not find X here" is published as "X does not exist" — and because a negative reads as thorough, nobody re-runs it.
+
+**Instances:** PR #61 — `OPTIMUS_AUDIT_2026-08-26.md` reported *"no Atlas file, `/roadmap/` directory, or domain files exist anywhere"* on the strength of `find . -iname "*atlas*"` run inside `OPTIMUS/`. One directory up sat **1.28 MB** across three files (`../OPtimus X atlass/`), including an 854-line executable specification with the SKILL.md schema, a source-quality hierarchy and decay clocks. The audit's own recommended next step was *"split the Atlas"*, which it then reported as impossible.
+
+**Why it survived:** A negative result has no artifact to check. A positive claim ("this function does X") invites someone to open the function; "X does not exist" invites nothing, and re-running a search to confirm nothing is there feels like wasted work. The scope mismatch is invisible in the sentence — `find .` and "anywhere" read identically once the command has scrolled away.
+
+**Detection:** **UNDETECTED** — no gate can know the intended scope of a prose claim. Partially mitigated by `docs/OPERATING_CONTEXT.md` §1, which records where the Atlas actually is so this specific absence cannot be re-derived, and §7, which requires a control query and a coverage fraction before any absence is asserted. That is a document, not a mechanism, and it is written down as such.
+
+**Rule:** An absence is a measurement. State the scope you searched and the fraction you covered, or do not state the absence.
 
 ---
 
