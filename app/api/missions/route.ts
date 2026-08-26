@@ -19,9 +19,9 @@ import { DiskArtifactStore } from "@/kernel/artifacts";
 import { DiskMissionStore, type MissionSummary } from "@/kernel/missionStore";
 import type { Evidence, MissionSpec } from "@/kernel/types";
 import { buildBroker } from "@/kernel/registry";
-import type { LlmChatMessage } from "@/kernel/capabilities/omniroute/chat";
 import { DATA_DIR } from "@/lib/data-dir";
 import { resolveChatContent } from "@/lib/missions/resolveChatContent";
+import { isValidMessages, asOperatorMessages, INVALID_MESSAGES_REASON } from "@/lib/missions/clientMessages";
 import { qualificationOf } from "@/kernel/models/qualified";
 
 export const dynamic = "force-dynamic";
@@ -59,20 +59,6 @@ export interface MissionApiResult {
   steps: MissionStepResult[];
 }
 
-function isValidMessages(value: unknown): value is LlmChatMessage[] {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every(
-      (m) =>
-        m &&
-        typeof m === "object" &&
-        typeof (m as { role?: unknown }).role === "string" &&
-        typeof (m as { content?: unknown }).content === "string",
-    )
-  );
-}
-
 function summarizeSteps(evidenceByStep: Record<string, Evidence | undefined>, spec: MissionSpec): MissionStepResult[] {
   return spec.steps.map((step) => {
     const evidence = evidenceByStep[step.id];
@@ -101,7 +87,10 @@ export async function POST(request: NextRequest) {
   const messages = (body as { messages?: unknown })?.messages;
   if (!isValidMessages(messages)) {
     return NextResponse.json(
-      { ok: false, reason: "requires { messages: { role, content }[] }" },
+      {
+        ok: false,
+        reason: INVALID_MESSAGES_REASON,
+      },
       { status: 400 },
     );
   }
@@ -125,6 +114,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const operatorMessages = asOperatorMessages(messages);
+
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
   const objective = (lastUserMessage?.content ?? "chat").slice(0, 80);
 
@@ -135,7 +126,10 @@ export async function POST(request: NextRequest) {
       {
         id: "chat",
         capabilityId: "llm.chat",
-        input: { baseUrl: OMNIROUTE_BASE_URL, model: OMNIROUTE_MODEL, messages },
+        // Tagged HERE, at the trust boundary, because this is the exact point
+        // where bytes stop being "whatever arrived over HTTP" and become
+        // something the kernel is prepared to say came from the operator.
+        input: { baseUrl: OMNIROUTE_BASE_URL, model: OMNIROUTE_MODEL, messages: operatorMessages },
         dependsOn: [],
         checks: ["llm.chatSucceeded"],
         agent: "chat",

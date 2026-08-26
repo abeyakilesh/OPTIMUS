@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **75 classes · 63 with a real detection mechanism · 12 UNDETECTED**
+> **76 classes · 64 with a real detection mechanism · 12 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -214,6 +214,20 @@ name a tracking issue or a reason it cannot be automated.
 **Why it survived:** It was written first and read as primary. Nothing tried to reach it.
 
 **Detection:** `tests/kernel/relocate-repair.test.ts` :: *never yields a repair when the contract check failed* — asserts the behaviour rather than crediting the branch
+
+---
+
+### `predicate-asserts-more-than-it-checks`
+
+**Looks like:** A TypeScript type predicate (`function f(v: unknown): v is T`) validates fewer fields than `T` declares. The compiler takes the signature at its word, so every downstream use is typed on a claim nothing verified — and `tsc` stays green precisely where it should have caught the gap.
+
+**Instances:** PR #65 — adding a required `trust` field to `LlmChatMessage` should have broken `app/api/missions/route.ts`, which builds `LlmChatMessage[]` from an HTTP body. `tsc --noEmit` exited **0**. The cause was `isValidMessages(value: unknown): value is LlmChatMessage[]`, which checked `role` and `content` and nothing else: the predicate asserted the new field into existence. Untagged messages would have reached the broker and been refused at runtime with a 503 rather than a 400 — and had the manifest field been optional, they would have reached the model.
+
+**Why it survived:** A predicate is the one place TypeScript deliberately stops checking and defers to the author, and it looks like validation while being an assertion. The failure is also invisible in the direction people test: the predicate correctly rejects malformed input, so its tests pass. What it silently *accepts* is the type claim itself, and nothing exercises that.
+
+**Detection:** `lib/missions/clientMessages.ts` :: the predicate now narrows to a `ClientMessage` type it fully checks, and the kernel-side type is produced by `asOperatorMessages` rather than asserted; `tests/kernel/message-provenance.test.ts` :: asserts the boundary refuses client-supplied provenance. **Partial** — this fixes the instance, not the class: any other `v is T` in the codebase can drift the same way and nothing sweeps for it.
+
+**Rule:** A type predicate must check every field of the type it asserts, or narrow to a smaller type it does check.
 
 ---
 
