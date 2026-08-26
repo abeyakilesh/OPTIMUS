@@ -181,9 +181,17 @@ const expected = `> **${total} classes · ${detected} with a real detection mech
 
 if (mode === "update") {
   const updated = text.replace(/^> \*\*\d+ classes ·.*$/m, expected);
-  if (updated === text) {
-    console.error("Could not find a coverage line to update.");
+  // "no change" and "no such line" are different outcomes and used to share an
+  // exit path, so running --update on an already-correct registry failed with
+  // "Could not find a coverage line" — a true statement about nothing that had
+  // happened (`mislabelled-failure-reason`, PR #62). Distinguish them.
+  if (!/^> \*\*\d+ classes ·.*$/m.test(text)) {
+    console.error("No coverage line found. The registry must state N classes · M detected · K UNDETECTED.");
     process.exit(1);
+  }
+  if (updated === text) {
+    console.log(`Coverage line already correct: ${total} classes · ${detected} detected · ${undetectedCount} UNDETECTED`);
+    process.exit(0);
   }
   writeFileSync(REGISTRY, updated);
   console.log(`Coverage line updated: ${total} classes · ${detected} detected · ${undetectedCount} UNDETECTED`);
