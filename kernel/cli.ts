@@ -16,7 +16,7 @@
 import { buildBroker } from "./registry";
 import { Harness } from "./harness";
 import { Scheduler } from "./scheduler";
-import { MemoryArtifactStore, addressOf } from "./artifacts";
+import { MemoryArtifactStore } from "./artifacts";
 import { htmlExtractTitle } from "./builtin";
 import type { Capability, MissionSpec } from "./types";
 
@@ -83,7 +83,12 @@ async function main(): Promise<void> {
       {
         id: "extract",
         capabilityId: "html.extractTitle",
-        input: { artifactId: addressOf(FIXTURE_HTML) },
+        // FACADE #2, killed. This was `addressOf(FIXTURE_HTML)` — a constant
+        // computed right here in the CLI, which meant `dependsOn: ["fetch"]`
+        // below was a TIMING edge carrying no data. Deleting the dependency
+        // changed nothing; the demo proving the pipe works proved only that
+        // two steps can run in order.
+        input: { artifactId: { $from: "fetch.artifactId" } },
         dependsOn: ["fetch"],
         checks: ["title.nonEmpty", "artifact.intact"],
         agent: "analyst",
@@ -103,7 +108,12 @@ async function main(): Promise<void> {
     const step = result.state.steps[stepId];
     const ok = step.status === "passed";
     const mark = ok ? green("✔") : red("✘");
-    console.log(`  ${mark} ${bold(stepId)} ${dim(`(${step.spec.agent ?? "—"})`)} · ${step.status}`);
+    // The CAPABILITY, not the agent. `agent` is a label a plan author chose
+    // and the kernel uses only for repair lookup; `capabilityId` is the thing
+    // that actually ran, and it is what a reader needs to go and look at.
+    console.log(
+      `  ${mark} ${bold(stepId)} ${dim(`(${step.spec.capabilityId})`)} · ${step.status}`,
+    );
 
     const evidence = step.evidence;
     if (!evidence) {
@@ -123,6 +133,16 @@ async function main(): Promise<void> {
       ),
     );
     for (const id of evidence.artifactIds) console.log(dim(`      ${id}`));
+  }
+
+  // The edge, printed. Without this the demo shows two steps in order and a
+  // reader has to take the data flow on trust — which is how the hardcoded
+  // constant survived in here for as long as it did.
+  for (const event of result.log.all()) {
+    if (event.type !== "step.resolved") continue;
+    for (const r of event.resolved) {
+      console.log(dim(`  ↳ ${event.stepId}: ${r.at} ← ${r.from} · ${r.outputArtifactId}`));
+    }
   }
 
   console.log();
