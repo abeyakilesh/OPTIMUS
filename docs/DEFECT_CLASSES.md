@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **79 classes · 67 with a real detection mechanism · 12 UNDETECTED**
+> **80 classes · 68 with a real detection mechanism · 12 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -139,7 +139,7 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** Evidence is gathered over one scope and the conclusion is stated over a larger one. A search of one directory becomes "does not exist anywhere"; a sample of one third of a document becomes a characterisation of all of it. The sentence never carries the scope, so the mismatch is invisible once the command has scrolled away.
 
-**Instances:** PR #61 — `OPTIMUS_AUDIT_2026-08-26.md` reported *"no Atlas file, `/roadmap/` directory, or domain files exist anywhere"* on the strength of `find . -iname "*atlas*"` run inside `OPTIMUS/`. One directory up sat **1.28 MB** across three files, and the audit's own recommended next step was *"split the Atlas"*. PR #62 — having read ~35% of `OPTIMUS and ATLAS RAW BRAIN 1.0.txt`, I characterised the remainder as *"a human learning syllabus"* and filed it as skippable. Lines 5954–7832 are a **50-section specification for OPTIMUS's knowledge-acquisition subsystem**, addressed to this repo's build bible by name, whose §49 is titled *"Relationship to the existing OPTIMUS kernel"*. The unread 65% contained the most relevant document in the corpus, and the dismissal was published as a scope-free judgement about the whole file.
+**Instances:** PR #61 — `OPTIMUS_AUDIT_2026-08-26.md` reported *"no Atlas file, `/roadmap/` directory, or domain files exist anywhere"* on the strength of `find . -iname "*atlas*"` run inside `OPTIMUS/`. One directory up sat **1.28 MB** across three files, and the audit's own recommended next step was *"split the Atlas"*. PR #62 — having read ~35% of `OPTIMUS and ATLAS RAW BRAIN 1.0.txt`, I characterised the remainder as *"a human learning syllabus"* and filed it as skippable. Lines 5954–7832 are a **50-section specification for OPTIMUS's knowledge-acquisition subsystem**, addressed to this repo's build bible by name, whose §49 is titled *"Relationship to the existing OPTIMUS kernel"*. The unread 65% contained the most relevant document in the corpus, and the dismissal was published as a scope-free judgement about the whole file. PR #73 — the model contract's `strict-json` probe grades a **40-token** answer and llama3.2:3b passes it, so the qualification record certifies the model for structured output. On a **400-character** plan the same model reliably emits a correct JSON object and then appends commentary or a second object: measured **7/10** compiled, over two independent samples of 10, with trailing text the dominant failure mode. The probe is real and its result is true; the scope it is read as covering is larger than the scope it tested (#72).
 
 **Why it survived:** Both directions of this are self-sealing. A negative result has no artifact anyone can open, so "X does not exist" invites no check. A characterisation ("this is a syllabus") reads as a summary rather than a claim, and summaries are not audited. In both cases the honest sentence — *"in the 35% I read"* — is longer and weaker-sounding than the wrong one, so it loses.
 
@@ -841,11 +841,25 @@ The #68 instances add a second, sharper reason, worth stating on its own: **an a
 
 ---
 
+### `well-formed-but-unrunnable`
+
+**Looks like:** Validation checks that a thing is STRUCTURALLY correct and never asks whether it can actually run. The artefact passes every gate and is guaranteed to fail the moment it executes.
+
+**Instances:** PR #73 — the plan compiler's first real compile against llama3.2:3b. Asked to *"send an email to my accountant"*, the model returned `web.fetch { url: "mailto:accountant@example.com" }` with `checks: ["browser.navigateSucceeded"]`. It validated: the capability was in the selectable set, the graph had no cycle, the check was registered. Two things nothing looked at — the input the manifest would actually accept (`mailto` is not in `allowedSchemes`), and whether that check can read that capability's output (it reads `output.text`; `web.fetch` returns `{ artifactId, bytes }`). A plan that was red before it started, for an objective that should have been refused outright.
+
+**Why it survived:** Every guard present was a guard on *existence* — does this capability exist, does this step exist, does this check exist — and existence questions are the ones that occur to you while writing a validator. "Would the door accept this?" needs the door, and the door was one layer down in the harness, which is exactly where it stops being plan-time information. The compiler had a `broker` in hand the whole time and `broker.validateInput` was already written.
+
+**Detection:** `kernel/planCompiler.ts` :: `literalInputViolations` runs the manifest's own input contract at plan time, stripping `$from` paths whose values do not exist yet; `CHECK_APPLICABILITY` refuses a check paired with a capability it cannot read; `tests/kernel/plan-compiler.test.ts` :: both observed plans are pinned as refusal tests.
+
+**Rule:** A validator that only asks whether the parts exist has not validated anything. Ask the doors the artefact will actually meet, at the time it is cheapest to refuse.
+
+---
+
 ### `mislabelled-failure-reason`
 
 **Looks like:** A failure is reported under the wrong category, hiding the real verdict.
 
-**Instances:** PR #66 — `checkOutput` reuses the input contract's engine, which hardcoded the path prefix `"input"`, so a capability whose RETURN value violated its manifest was told `input.artifactId: required field is missing`. Both ends of a step are being validated by then, and the message sent the reader to the wrong one. Caught by the output door's own tests before it shipped; fixed by making the root label a parameter. PR #13 — the harness reported `budget-exhausted` for a step that simply failed its check on its only permitted attempt. Nothing had run away; the label hid the real reason. PR #62 — `defect-registry.mjs --update` exited 1 with *"Could not find a coverage line to update"* when the line was present **and already correct**: "no change" and "no such line" shared one exit path, so a no-op reported a structural fault. Fixed by testing for the line's existence separately from whether the replacement changed anything.
+**Instances:** PR #73 — the plan compiler reported *"the model did not return JSON"* on output that BEGAN with a valid JSON object and then carried trailing prose. The statement was false, and the message clipped the evidence at 200 characters — so three sampled failures looked like truncated model output, and **the truncation being diagnosed was the error message's own**. Two fixes, and the second matters more: the branch now distinguishes "valid object plus trailing text" from "not JSON at all", and an unparseable output is reported with its length plus its head AND tail. An error that truncates its evidence invites a conclusion drawn from the truncation. PR #66 — `checkOutput` reuses the input contract's engine, which hardcoded the path prefix `"input"`, so a capability whose RETURN value violated its manifest was told `input.artifactId: required field is missing`. Both ends of a step are being validated by then, and the message sent the reader to the wrong one. Caught by the output door's own tests before it shipped; fixed by making the root label a parameter. PR #13 — the harness reported `budget-exhausted` for a step that simply failed its check on its only permitted attempt. Nothing had run away; the label hid the real reason. PR #62 — `defect-registry.mjs --update` exited 1 with *"Could not find a coverage line to update"* when the line was present **and already correct**: "no change" and "no such line" shared one exit path, so a no-op reported a structural fault. Fixed by testing for the line's existence separately from whether the replacement changed anything.
 
 **Why it survived:** Both are failures, so the step was red either way and nobody read further.
 
@@ -857,7 +871,7 @@ The #68 instances add a second, sharper reason, worth stating on its own: **an a
 
 **Looks like:** A grader returns the right verdict with a reason that is untrue about the input.
 
-**Instances:** PR #50 — the refusal grader matched only `/unknown/`, so `"I don't know."` — a correct refusal in the wrong wording — was reported as *"neither UNKNOWN nor a refusal"*. Both outcomes are failures, so the verdict was right; the reason was false, and reasons are what a repair loop reads.
+**Instances:** PR #73 — measured on the plan compiler: asked for something impossible, llama3.2:3b refused **5/5**, which is the behaviour that matters — but one refusal read *"Only web.fetch capability is available"* when three were offered. The verdict was right and the stated reason was false. Recorded because a refusal reason is what a caller reads to decide what to try next, and the same shape in a repair loop would send it after the wrong fix. PR #50 — the refusal grader matched only `/unknown/`, so `"I don't know."` — a correct refusal in the wrong wording — was reported as *"neither UNKNOWN nor a refusal"*. Both outcomes are failures, so the verdict was right; the reason was false, and reasons are what a repair loop reads.
 
 **Why it survived:** The pass/fail column was correct, which is what tests assert.
 
