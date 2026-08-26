@@ -5,9 +5,27 @@
  * there's only one step in it today), persisted so the sidebar has
  * something real to list.
  *
- * Still the smallest honest slice: one message in, one llm.chat step out.
- * The graph shape is real and ready for more steps; there just aren't more
- * capabilities wired into a planner yet to add them.
+ * TWO PATHS, BOTH NAMED IN THE RESPONSE (#73):
+ *
+ *   compiled  — the plan compiler turned the objective into a real DAG over the
+ *               selectable capabilities, and that plan ran. This is the first
+ *               time a mission with more than one capability is reachable from
+ *               the product.
+ *   chat      — the compiler REFUSED, honestly, and the objective is handled as
+ *               a conversation: one llm.chat step, tagged at the trust boundary.
+ *
+ * The fallback is not a way of hiding a refusal. `compiled` and
+ * `compilerReason` are in the response body precisely so a refusal is visible
+ * rather than converted into something that looks like success — the compiler
+ * declining is information, and D8 exists because a fabricated plan is worse
+ * than an admitted one.
+ *
+ * WHY THE CHAT PATH IS NOT COMPILED. `llm.chat` is deliberately not selectable
+ * by the compiler: every literal in a compiled plan was written by the model, so
+ * a message it emits cannot truthfully carry `trust`. Here the tag is honest,
+ * because this is the exact point where bytes stop being "whatever arrived over
+ * HTTP" and become something the kernel is prepared to attribute to the
+ * operator. See kernel/planCompiler.ts and #70.
  */
 
 import { randomUUID } from "node:crypto";
@@ -23,6 +41,9 @@ import { DATA_DIR } from "@/lib/data-dir";
 import { resolveChatContent } from "@/lib/missions/resolveChatContent";
 import { isValidMessages, asOperatorMessages, INVALID_MESSAGES_REASON } from "@/lib/missions/clientMessages";
 import { qualificationOf } from "@/kernel/models/qualified";
+import { compilePlan } from "@/kernel/planCompiler";
+import { ALL_CHECKS } from "@/kernel/registry";
+import { compilerAsk } from "@/lib/missions/compilerAsk";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +78,14 @@ export interface MissionApiResult {
   content?: string;
   reason?: string;
   steps: MissionStepResult[];
+  /** Which path ran: a compiled DAG, or the single-step chat fallback. */
+  compiled: boolean;
+  /**
+   * Why the compiler declined, when it did. Present on the chat path and
+   * absent on the compiled one — a refusal is information, not an embarrassment
+   * to hide behind a reply that looks like success.
+   */
+  compilerReason?: string;
 }
 
 function summarizeSteps(evidenceByStep: Record<string, Evidence | undefined>, spec: MissionSpec): MissionStepResult[] {
@@ -119,32 +148,42 @@ export async function POST(request: NextRequest) {
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
   const objective = (lastUserMessage?.content ?? "chat").slice(0, 80);
 
-  const spec: MissionSpec = {
-    id: randomUUID(),
-    objective,
-    steps: [
-      {
-        id: "chat",
-        capabilityId: "llm.chat",
-        // Tagged HERE, at the trust boundary, because this is the exact point
-        // where bytes stop being "whatever arrived over HTTP" and become
-        // something the kernel is prepared to say came from the operator.
-        input: { baseUrl: OMNIROUTE_BASE_URL, model: OMNIROUTE_MODEL, messages: operatorMessages },
-        dependsOn: [],
-        checks: ["llm.chatSucceeded"],
-        agent: "chat",
-      },
-    ],
-  };
-
   // One registry, shared with kernel/cli.ts. This registers every absorbed
-  // capability, not just the one this mission plan happens to name — so when
-  // a planner writes the plan, the set it can choose from is the real one.
-  // Registered is not AVAILABLE: nothing in the UI presents these as working.
+  // capability, and the compiler's selectable SUBSET is derived from these
+  // manifests — so what a model may choose from is the real set, filtered by
+  // rules that live in code rather than in a document.
   const broker = buildBroker();
   const store = artifactStore();
   const harness = new Harness({ broker, store });
   const scheduler = new Scheduler({ harness });
+
+  const missionId = randomUUID();
+  const compiled = await compilePlan({
+    objective,
+    missionId,
+    broker,
+    checkIds: ALL_CHECKS.map((c) => c.id),
+    ask: compilerAsk(harness, { baseUrl: OMNIROUTE_BASE_URL, model: OMNIROUTE_MODEL }),
+  });
+
+  const spec: MissionSpec = compiled.ok
+    ? compiled.spec
+    : {
+        id: missionId,
+        objective,
+        steps: [
+          {
+            id: "chat",
+            capabilityId: "llm.chat",
+            // Tagged HERE, at the trust boundary — see the file docstring for
+            // why this tag is honest and a compiled one would not be.
+            input: { baseUrl: OMNIROUTE_BASE_URL, model: OMNIROUTE_MODEL, messages: operatorMessages },
+            dependsOn: [],
+            checks: ["llm.chatSucceeded"],
+            agent: "chat",
+          },
+        ],
+      };
 
   const result = await scheduler.run(spec);
   await missionStore().save(result.log);
@@ -152,16 +191,28 @@ export async function POST(request: NextRequest) {
   const evidenceByStep: Record<string, Evidence | undefined> = {};
   for (const [id, step] of Object.entries(result.state.steps)) evidenceByStep[id] = step.evidence;
 
+  // Reply text exists only on the chat path: `resolveChatContent` reads
+  // llm.chat's raw upstream response, and a compiled plan has no such step.
+  // Returning nothing there is honest — a compiled mission's result is its
+  // evidence, and rendering it is a surface question this route does not answer.
   const chatEvidence = evidenceByStep.chat;
-  const content = result.green ? await resolveChatContent(chatEvidence, store) : undefined;
+  const content = result.green && !compiled.ok ? await resolveChatContent(chatEvidence, store) : undefined;
+
+  const firstFailure = Object.values(evidenceByStep).find((e) =>
+    e?.checks.some((c) => !c.passed),
+  );
 
   const response: MissionApiResult = {
     ok: result.green,
     missionId: spec.id,
     status: result.green ? "green" : "red",
     content,
-    reason: result.green ? undefined : (chatEvidence?.checks[0]?.reason ?? "mission did not complete"),
+    reason: result.green
+      ? undefined
+      : (firstFailure?.checks.find((c) => !c.passed)?.reason ?? "mission did not complete"),
     steps: summarizeSteps(evidenceByStep, spec),
+    compiled: compiled.ok,
+    compilerReason: compiled.ok ? undefined : compiled.reason,
   };
 
   return NextResponse.json(response, { status: result.green ? 200 : 503 });
