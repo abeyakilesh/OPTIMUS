@@ -195,6 +195,47 @@ describe("the file-based checks run against a REAL diff", () => {
     expect(r.out).toMatch(/No Absorption Score found/);
   });
 
+  /**
+   * #65. The guard demanded an Absorption Score from a PR that added a
+   * required `trust` field to llm.chat's manifest — absorbing nothing. It
+   * keyed on any change under kernel/capabilities/, and `--name-only` cannot
+   * tell an edit from an addition.
+   *
+   * Both directions are asserted, because narrowing a detector is one
+   * character away from disabling it.
+   */
+  describe("absorption means a capability was ADDED, not touched", () => {
+    /** Located from history rather than hardcoded, so a rename cannot rot it. */
+    const commitThat = (filter: string, path: string) => {
+      const sha = execFileSync(
+        "git",
+        ["log", `--diff-filter=${filter}`, "--format=%H", "-1", "--", path],
+        { encoding: "utf8" },
+      ).trim();
+      if (!sha) throw new Error(`no ${filter} commit for ${path} — this test no longer tests what it says`);
+      return sha;
+    };
+    const CAP = "kernel/capabilities/scrapling-relocate.ts";
+
+    it("does NOT demand a score when a capability was only EDITED", () => {
+      const head = commitThat("M", CAP);
+      const r = runGuard("An ordinary kernel change.", "kernel: adjust a manifest", {
+        base: rev(`${head}^`),
+        head,
+      });
+      expect(r.out).toMatch(/Not an absorption PR/);
+      expect(r.out).not.toMatch(/No Absorption Score found/);
+      expect(r.code).toBe(0);
+    });
+
+    it("STILL demands one when a capability was ADDED — narrowing must not disable", () => {
+      const head = commitThat("A", CAP);
+      const r = runGuard("No score in this body.", "kernel: something", { base: rev(`${head}^`), head });
+      expect(r.out).toMatch(/No Absorption Score found/);
+      expect(r.code).toBe(1);
+    });
+  });
+
   it("rejects a malformed SHA instead of handing it to git", () => {
     const r = runGuard("body", "chore: x", { base: "not-a-sha; rm -rf /", head: rev("HEAD") });
     expect(r.code).toBe(1);

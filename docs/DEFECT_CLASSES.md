@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **76 classes · 64 with a real detection mechanism · 12 UNDETECTED**
+> **77 classes · 65 with a real detection mechanism · 12 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -436,6 +436,20 @@ name a tracking issue or a reason it cannot be automated.
 **Why it survived:** The guard printed *"Absorption rules satisfied"* either way.
 
 **Detection:** `tests/unit/absorption-guard.test.ts` :: *looks for capabilities under kernel/capabilities/, the path they are actually at* and *detects capabilities from the file list, and counts them*
+
+---
+
+### `detector-fires-on-presence-not-event`
+
+**Looks like:** A detector keys on a file *path* when the thing it is detecting is an *event* at that path. Touching the path is enough to trigger it, so ordinary maintenance of an existing thing is reported as the creation of a new one.
+
+**Instances:** PR #65 — `absorption-guard.mjs` demanded an Absorption Score from a PR that added a required `trust` field to `llm.chat`'s manifest, absorbing nothing. Its file-based detector was `changed.some((f) => f.startsWith("kernel/capabilities/"))`, and `git diff --name-only` cannot distinguish an edit from an addition. Every future PR maintaining an absorbed capability would have hit the same wall, and the cheap way out — pasting a fabricated score to make the gate green — is precisely the defect the guard exists to prevent.
+
+**Why it survived:** The detector was *added* in a PR that genuinely absorbed something, so its first and only exercise was a true positive. A path-prefix test also reads as obviously correct: capabilities do live there. Nothing distinguished "a capability exists here" from "a capability arrived here" until a PR did the former without the latter.
+
+**Detection:** `scripts/absorption-guard.mjs` :: keys on `git diff --diff-filter=A`, so only an ADDED capability counts; `tests/unit/absorption-guard.test.ts` :: asserts **both** directions against real history — an edit-only commit must not demand a score, and the commit that actually added `scrapling-relocate.ts` must still demand one. Narrowing a detector is one character from disabling it, so both are pinned.
+
+**Rule:** Detect the event, not the location. If the signal is "this was created", diff for creation.
 
 ---
 
