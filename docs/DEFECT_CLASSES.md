@@ -897,7 +897,7 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** A test assumes git history that CI's shallow checkout does not have.
 
-**Instances:** PR #53 — real-diff tests used `HEAD~1`; `actions/checkout` defaults to depth 1, so they passed locally and failed in CI. Replaced with git's empty-tree object `4b825dc…`, which needs no history — and incidentally exercises the one-repo-per-PR check for the first time.
+**Instances:** PR #53 — real-diff tests used `HEAD~1`; `actions/checkout` defaults to depth 1, so they passed locally and failed in CI. Replaced with git's empty-tree object `4b825dc…`, which needs no history — and incidentally exercises the one-repo-per-PR check for the first time. PR #65 — new absorption-guard tests located their fixture commits with `git log --diff-filter=A -1 -- <path>`, which needs history; `actions/checkout@v5` clones at depth 1, so `git log` sees one commit and the fixture lookup threw. Green locally, red in CI. **The same test file already carried a comment warning about this exact hazard**, written when `HEAD~1` failed the same way. Fixed by removing the dependency rather than accommodating it: the tests now build a throwaway git repo with one ADD and one EDIT, so clone depth is irrelevant and the scenario is exact instead of whatever history happens to contain.
 
 **Why it survived:** Local git has full history; CI's does not, and nothing in the test names the assumption.
 
