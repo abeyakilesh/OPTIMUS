@@ -81,3 +81,4 @@ CLAUDE.md
 # tests fail without it (THE MUTATION RULE). The file is written with a unique
 # name and unlinked in a finally; this entry only covers a killed process.
 kernel/artifacts.mutant-*.ts
+kernel/capabilities/omniroute/chat.mutant-*.ts

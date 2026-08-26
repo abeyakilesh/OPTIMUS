@@ -64,7 +64,7 @@ describe.skipIf(!environment.ready)(
           input: {
             baseUrl: BASE_URL,
             model: MODEL,
-            messages: [{ role: "user", content: "Reply with a short greeting." }],
+            messages: [{ role: "user", content: "Reply with a short greeting.", trust: "operator" }],
           },
           dependsOn: [],
           checks: ["llm.chatSucceeded"],
@@ -96,7 +96,7 @@ describe.skipIf(!environment.ready)(
         const outcome = await harness.runStep({
           id: "unprivileged",
           capabilityId: "llm.chat.unprivileged",
-          input: { baseUrl: BASE_URL, model: MODEL, messages: [{ role: "user", content: "hi" }] },
+          input: { baseUrl: BASE_URL, model: MODEL, messages: [{ role: "user", content: "hi", trust: "operator" }] },
           dependsOn: [],
           checks: [],
         });
@@ -119,7 +119,7 @@ describe.skipIf(!environment.ready)(
           input: {
             baseUrl: BASE_URL,
             model: "optimus-test-nonexistent-provider/does-not-exist",
-            messages: [{ role: "user", content: "hi" }],
+            messages: [{ role: "user", content: "hi", trust: "operator" }],
           },
           dependsOn: [],
           checks: ["llm.chatSucceeded"],

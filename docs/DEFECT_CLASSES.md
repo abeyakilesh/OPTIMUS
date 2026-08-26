@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **75 classes · 63 with a real detection mechanism · 12 UNDETECTED**
+> **77 classes · 65 with a real detection mechanism · 12 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -214,6 +214,20 @@ name a tracking issue or a reason it cannot be automated.
 **Why it survived:** It was written first and read as primary. Nothing tried to reach it.
 
 **Detection:** `tests/kernel/relocate-repair.test.ts` :: *never yields a repair when the contract check failed* — asserts the behaviour rather than crediting the branch
+
+---
+
+### `predicate-asserts-more-than-it-checks`
+
+**Looks like:** A TypeScript type predicate (`function f(v: unknown): v is T`) validates fewer fields than `T` declares. The compiler takes the signature at its word, so every downstream use is typed on a claim nothing verified — and `tsc` stays green precisely where it should have caught the gap.
+
+**Instances:** PR #65 — adding a required `trust` field to `LlmChatMessage` should have broken `app/api/missions/route.ts`, which builds `LlmChatMessage[]` from an HTTP body. `tsc --noEmit` exited **0**. The cause was `isValidMessages(value: unknown): value is LlmChatMessage[]`, which checked `role` and `content` and nothing else: the predicate asserted the new field into existence. Untagged messages would have reached the broker and been refused at runtime with a 503 rather than a 400 — and had the manifest field been optional, they would have reached the model.
+
+**Why it survived:** A predicate is the one place TypeScript deliberately stops checking and defers to the author, and it looks like validation while being an assertion. The failure is also invisible in the direction people test: the predicate correctly rejects malformed input, so its tests pass. What it silently *accepts* is the type claim itself, and nothing exercises that.
+
+**Detection:** `lib/missions/clientMessages.ts` :: the predicate now narrows to a `ClientMessage` type it fully checks, and the kernel-side type is produced by `asOperatorMessages` rather than asserted; `tests/kernel/message-provenance.test.ts` :: asserts the boundary refuses client-supplied provenance. **Partial** — this fixes the instance, not the class: any other `v is T` in the codebase can drift the same way and nothing sweeps for it.
+
+**Rule:** A type predicate must check every field of the type it asserts, or narrow to a smaller type it does check.
 
 ---
 
@@ -422,6 +436,20 @@ name a tracking issue or a reason it cannot be automated.
 **Why it survived:** The guard printed *"Absorption rules satisfied"* either way.
 
 **Detection:** `tests/unit/absorption-guard.test.ts` :: *looks for capabilities under kernel/capabilities/, the path they are actually at* and *detects capabilities from the file list, and counts them*
+
+---
+
+### `detector-fires-on-presence-not-event`
+
+**Looks like:** A detector keys on a file *path* when the thing it is detecting is an *event* at that path. Touching the path is enough to trigger it, so ordinary maintenance of an existing thing is reported as the creation of a new one.
+
+**Instances:** PR #65 — `absorption-guard.mjs` demanded an Absorption Score from a PR that added a required `trust` field to `llm.chat`'s manifest, absorbing nothing. Its file-based detector was `changed.some((f) => f.startsWith("kernel/capabilities/"))`, and `git diff --name-only` cannot distinguish an edit from an addition. Every future PR maintaining an absorbed capability would have hit the same wall, and the cheap way out — pasting a fabricated score to make the gate green — is precisely the defect the guard exists to prevent.
+
+**Why it survived:** The detector was *added* in a PR that genuinely absorbed something, so its first and only exercise was a true positive. A path-prefix test also reads as obviously correct: capabilities do live there. Nothing distinguished "a capability exists here" from "a capability arrived here" until a PR did the former without the latter.
+
+**Detection:** `scripts/absorption-guard.mjs` :: keys on `git diff --diff-filter=A`, so only an ADDED capability counts; `tests/unit/absorption-guard.test.ts` :: asserts **both** directions against real history — an edit-only commit must not demand a score, and the commit that actually added `scrapling-relocate.ts` must still demand one. Narrowing a detector is one character from disabling it, so both are pinned.
+
+**Rule:** Detect the event, not the location. If the signal is "this was created", diff for creation.
 
 ---
 
@@ -869,7 +897,7 @@ name a tracking issue or a reason it cannot be automated.
 
 **Looks like:** A test assumes git history that CI's shallow checkout does not have.
 
-**Instances:** PR #53 — real-diff tests used `HEAD~1`; `actions/checkout` defaults to depth 1, so they passed locally and failed in CI. Replaced with git's empty-tree object `4b825dc…`, which needs no history — and incidentally exercises the one-repo-per-PR check for the first time.
+**Instances:** PR #53 — real-diff tests used `HEAD~1`; `actions/checkout` defaults to depth 1, so they passed locally and failed in CI. Replaced with git's empty-tree object `4b825dc…`, which needs no history — and incidentally exercises the one-repo-per-PR check for the first time. PR #65 — new absorption-guard tests located their fixture commits with `git log --diff-filter=A -1 -- <path>`, which needs history; `actions/checkout@v5` clones at depth 1, so `git log` sees one commit and the fixture lookup threw. Green locally, red in CI. **The same test file already carried a comment warning about this exact hazard**, written when `HEAD~1` failed the same way. Fixed by removing the dependency rather than accommodating it: the tests now build a throwaway git repo with one ADD and one EDIT, so clone depth is irrelevant and the scenario is exact instead of whatever history happens to contain.
 
 **Why it survived:** Local git has full history; CI's does not, and nothing in the test names the assumption.
 
