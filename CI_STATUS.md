@@ -187,6 +187,51 @@ rules), gitleaks, and dependency CVEs.
 5. **Flip `harden-runner` to `block`** once audit logs reveal the real egress
    allow-list.
 
+
+## Break-glass — when a required gate locks out its own repair
+
+*Added 2026-08-25 after gate 4 blocked every PR for ~40 minutes, including the PR that fixed it.*
+
+**The structural hazard, not the outage.** Every gate here is a *required* status check, which is the whole
+point — nothing merges red. But it means a broken gate blocks the fix for that gate. The repair has to ride on
+a PR that the broken gate is refusing. That is a deadlock by construction, and it is worth knowing about before
+you meet it at speed.
+
+**What happened.** `ai-review` (gate 4) installs OmniRoute with `npm i -g omniroute` — ~1,200 transitive
+packages, the heaviest single step in the gauntlet. A transient fetch failure made it fail. Because the step
+runs under `bash -e`, the script aborted **before the health loop ever ran**, and the job reported:
+
+```
+##[error]OmniRoute did not become healthy in 60s.
+nohup: failed to run command 'omniroute': No such file or directory
+```
+
+The first line is **false**. Nothing was ever started, so nothing could be unhealthy. npm prints only a
+*pointer* to a debug log on a runner that is seconds from deletion, so the real cause was in no visible output
+at all. Three separate investigations chased the gateway, the API keys and the health check — the wrong layer
+every time — because the error named a subsystem the job never reached.
+
+**Order of preference when a gate is broken:**
+
+1. **Fix forward on a normal PR.** If the gate's failure is transient, a re-run may be enough — try that first
+   and give it a real chance before escalating.
+2. **Fix forward, accepting the deadlock.** If the broken gate is the one you are fixing, push the fix to the
+   blocked PR anyway. It cannot merge until the fix works, which is the correct incentive: it forces the repair
+   to be genuinely verified rather than asserted. This is what was done here, and it should stay the default.
+3. **Temporarily drop the context from branch protection** — `gh api -X PUT .../branches/main/protection` with
+   the context removed. **Re-add it in the same session**, and record in the PR that protection was reduced,
+   for how long, and by whom. Never a silent removal, and never left overnight.
+4. **`--admin` merge.** Last resort, and only for a change whose entire content is the gate repair. It bypasses
+   every other gate too, which is exactly why it is fourth.
+
+> ⚠️ Steps 3 and 4 both weaken the gauntlet, and this file is the record that they were used. An unrecorded
+> bypass is indistinguishable from the gate never having existed — see THE ENFORCEMENT RULE.
+
+**The durable lesson is about diagnosability, not availability.** A gate that fails is an outage; a gate that
+**misreports which layer failed** costs more than the outage, because it spends the responder's attention in
+the wrong place. Any step that can fail before the thing it is checking has started must say so — `bash -e`
+plus a trailing error message is a trap, because the message describes a state the script never reached.
+
 ## Absorption score
 
 > **This paragraph used to read "No repo absorbed. Every repo sits at 0/100."**
