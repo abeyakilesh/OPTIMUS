@@ -18,8 +18,31 @@
 
 import { execFileSync } from "node:child_process";
 
-const body = process.env.PR_BODY ?? "";
+const rawBody = process.env.PR_BODY ?? "";
 const title = process.env.PR_TITLE ?? "";
+
+/**
+ * The body with HTML comments removed.
+ *
+ * WHY: `.github/PULL_REQUEST_TEMPLATE.md` ships its own instructions inside
+ * `<!-- -->`, and one of those lines is
+ *
+ *     **Repo:** · **Fate:** PORT / BUNDLE / HARVEST · **Pinned SHA:**
+ *
+ * which is exactly what the absorption detector below matches on. So a PR
+ * whose body still carries the UNFILLED template was classified as an
+ * absorption and asked for a score breakdown it could not have — the
+ * placeholder was read as a claim. Caught on PR #78, a kernel-only change
+ * whose body GitHub had auto-filled from the commit message plus the template.
+ *
+ * The direction of the bug is what makes it worth a fix rather than a note:
+ * it demanded MORE than it should, so it failed loudly instead of passing
+ * silently. The same read is one edit away from the opposite — a real Fate
+ * line commented out and a real absorption sailing through unscored.
+ *
+ * A comment is not a claim. Everything below reads this, never `rawBody`.
+ */
+const body = rawBody.replace(/<!--[\s\S]*?-->/g, "");
 
 const errors = [];
 const warnings = [];
