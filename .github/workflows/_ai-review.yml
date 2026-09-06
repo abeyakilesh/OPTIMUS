@@ -191,6 +191,31 @@ jobs:
         with:
           claude-api-key: ${{ secrets.ANTHROPIC_API_KEY || 'omniroute-local' }}
           comment-pr: true
+          # REVIEW WHAT MERGES, NOT WHAT WAS PUSHED FIRST.
+          #
+          # The action's default is `false`: it caches a per-PR marker after
+          # its first run and every later commit prints
+          #
+          #   ClaudeCode has already run on PR #78 (found marker file),
+          #   forcing disable to avoid false positives
+          #   ClaudeCode is disabled for this run
+          #
+          # and the job still reports SUCCESS. Measured on PR #78: three
+          # ai-review jobs, ONE of them enabled. The two after it were green
+          # having reviewed nothing, and the code that actually merged — a
+          # commit reclassifying two output fields as untrusted — was never
+          # seen by this gate.
+          #
+          # That is a required security check whose green tick can mean "not
+          # checked", which is the exact shape of defect CLAUDE.md exists to
+          # prevent: gate 4 is listed as blocking, so it must be blocking on
+          # the diff that lands, not on an earlier draft of it.
+          #
+          # The documented cost is more false positives on long PRs, because
+          # the same code is analysed repeatedly. That is the right trade for
+          # a gate: a spurious finding is argued down in review, a missed one
+          # merges. Cost is bounded by the job's own 20-minute timeout.
+          run-every-commit: true
 
       - name: Gateway logs on failure
         if: failure() && steps.backend.outputs.mode == 'omniroute'
