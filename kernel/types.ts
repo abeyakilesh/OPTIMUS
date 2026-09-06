@@ -8,7 +8,7 @@
 
 import type { Isolation } from "./sandbox";
 import type { InputConstraints } from "./inputContract";
-import type { OutputConstraints } from "./outputContract";
+import type { OutputConstraints, OutputTrust } from "./outputContract";
 export type { Isolation };
 
 /** Content-addressed artifact id: "sha256:<64 hex>". */
@@ -100,6 +100,27 @@ export interface CapabilityManifest {
    * is exactly what THE SELF-DESCRIPTION RULE is about.
    */
   outputs: OutputConstraints;
+  /**
+   * Gate 8, fifth leg. `outputs` says what SHAPE comes back; this says WHO
+   * AUTHORED IT, per field.
+   *
+   * The four above are all about what the kernel lets a capability do. This
+   * one is about what the kernel may believe afterwards, and it is the half
+   * that was missing: `browser.navigate` returns `ok` (a boolean this kernel
+   * computed) and `text` (whatever the page said) with the same `string` /
+   * `boolean` honesty and no way to tell them apart.
+   *
+   * REQUIRED and exhaustive in both directions. A capability returning
+   * nothing declares `{}`. Legal values are `capability` and `untrusted`
+   * only — `kernel` and `operator` are refused at registration, because a
+   * return value is neither committed OPTIMUS policy nor something the human
+   * typed. See kernel/outputContract.ts for the full reasoning.
+   *
+   * WHAT CONSUMES IT: `validateReferences` refuses a plan that pipes an
+   * `untrusted` field into a message tagged as anything better. That is the
+   * check #64 named as its ceiling and #65 could not build.
+   */
+  outputTrust: OutputTrust;
   /** Budgets a step gets by default when it invokes this capability. */
   defaultBudget: Budget;
   /** Human-readable, used in evidence. */

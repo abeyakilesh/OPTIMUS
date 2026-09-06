@@ -75,9 +75,13 @@ export const CAPABILITY_SELECTION: Readonly<
       "every literal in a compiled plan was written by the MODEL, and llm.chat's messages each carry a " +
       "required `trust` tag. A message the compiler emits cannot declare that tag truthfully: `kernel` " +
       "would be a lie about model-authored bytes, and `operator` would be a lie about anything the " +
-      "operator did not write. Tagging everything `untrusted` is the only honest option and would fence " +
-      "the operator's own words as data. Blocked on #70 (structural trust for compiled plans). Its " +
-      "isolation and permissions are fine — this is a provenance limit, not a blast-radius one",
+      "operator did not write. #70 (ADR-0010) closed HALF of this: a message whose content is a `$from` " +
+      "reference is now structurally forced to carry the producing field's real trust, so a compiled " +
+      "`web.fetch -> llm.chat` chain can no longer claim the page was kernel-authored. The remaining " +
+      "half is the LITERAL, which has no reference to check it against — the honest fix is a rule that " +
+      "llm.chat message content must be a reference and never a literal, which is its own decision and " +
+      "its own PR. Its isolation and permissions are fine — this is a provenance limit, not a " +
+      "blast-radius one",
   },
   "browser.navigate": {
     selectable: false,
@@ -220,7 +224,8 @@ export function describeCapabilities(
  *
  * Interpolating the objective into this block would put operator text inside a
  * message the kernel is about to tag `trust: "kernel"` — manufacturing exactly
- * the confusion #64 closed and #70 is still open about, in the same PR that
+ * the confusion #64 closed and #70 (ADR-0010) now refuses structurally for
+ * referenced content, in the same PR that
  * introduces a model choosing capabilities. The two halves travel as two
  * messages with two different tags, and `CompilerRequest` is the shape that
  * makes keeping them apart the only available option.

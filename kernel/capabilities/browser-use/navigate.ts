@@ -167,6 +167,30 @@ export const browserNavigate: Capability = {
       error: { kind: "string" },
       artifactId: ARTIFACT_ID_OUTPUT,
     },
+    // The capability that motivated per-field trust in #70. Three of these
+    // fields are the page talking and three are the kernel talking, and a
+    // single level for the whole capability would have had to lie about one
+    // group or cripple the other.
+    //
+    //   · `title` and `text` are authored by whoever controls the page.
+    //   · `url` is untrusted too, and it is the one people get wrong: it is
+    //     the address AFTER redirects, so the destination chose it, not us.
+    //     The input `url` was ours; this one is a result.
+    //   · `error` is untrusted as well, corrected after review caught the
+    //     same mistake in llm.chat. bridge.py catches broadly and returns
+    //     `f"{type(error).__name__}: {error}"`, so a CDP or browser-use
+    //     exception carries whatever the page put in it. "Our bridge wrote the
+    //     string" describes the FORMAT, not the contents.
+    //   · `ok` is our bridge's own boolean and `artifactId` is a hash computed
+    //     on this side. A page cannot set either.
+    outputTrust: {
+      ok: "capability",
+      url: "untrusted",
+      title: "untrusted",
+      text: "untrusted",
+      error: "untrusted",
+      artifactId: "capability",
+    },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 45_000, maxCost: 20 },
     description:
       "Navigates a real, headless Chromium-family browser to a URL via " +
