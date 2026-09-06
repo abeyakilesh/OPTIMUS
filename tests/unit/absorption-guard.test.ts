@@ -154,6 +154,91 @@ describe("it can still tell WHICH PRs it applies to", () => {
     expect(r.out).toMatch(/Not an absorption PR/);
   });
 
+  it("does not read the UNFILLED PR template's own placeholder as a Fate line", () => {
+    // PR #78 — a kernel-only change. GitHub auto-filled the body from the
+    // commit message plus `.github/PULL_REQUEST_TEMPLATE.md`, whose commented
+    // instructions contain the literal placeholder below. The guard matched it,
+    // called the PR an absorption, and demanded a score breakdown for a PR that
+    // absorbed nothing.
+    const templated = [
+      "A normal kernel change with no absorption in it.",
+      "",
+      "<!--",
+      "## Absorption (delete if not absorbing a repo)",
+      "**Repo:** · **Fate:** PORT / BUNDLE / HARVEST · **Pinned SHA:**",
+      "-->",
+    ].join("\n");
+    const r = runGuard(templated, "kernel: a capability declares the trust of what it returns");
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/Not an absorption PR/);
+  });
+
+  it("still reads a REAL Fate line that happens to sit next to a comment", () => {
+    // The fix strips comments; it must not strip the document. Without this,
+    // "ignore the template" could quietly become "ignore the body".
+    const r = runGuard(
+      "<!-- a note to the reviewer -->\n\n**Fate:** PORT\n\nno score here",
+      "chore: something",
+    );
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/No Absorption Score found/);
+  });
+
+  it("a gauntlet-weakening declaration inside a comment does not count", () => {
+    // Same rule, opposite direction, and this is the one that would have
+    // mattered: `WEAKENS THE GAUNTLET` is an ACKNOWLEDGEMENT, so honouring it
+    // inside a comment would let a PR neuter a gate with an invisible excuse.
+    // Asserted against CODE, not prose: strip the comments out of the source
+    // first, so this cannot be satisfied or broken by how the file documents
+    // itself. `rawBody` may appear exactly twice — where it is read from the
+    // environment, and where it is stripped into `body`. A third use would be
+    // a consumer that had gone back to the unstripped text.
+    const code = readFileSync(GUARD, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(code).toMatch(/const body = stripHtmlComments\(rawBody\)/);
+    expect(code.split("rawBody").length - 1).toBe(2);
+  });
+
+  it("ends a comment at the FIRST --> , because comments do not nest", () => {
+    // `<!-- a <!-- **Fate:** PORT --> ` is a complete comment; the ` real -->`
+    // after it is text a reviewer SEES. A greedy strip would swallow the whole
+    // line and hide visible content from the guard. The Fate line here is
+    // inside the comment, so it must NOT count.
+    const r = runGuard(
+      "<!-- note <!-- **Fate:** PORT --> still visible -->",
+      "kernel: something",
+    );
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/Not an absorption PR/);
+  });
+
+  it("counts a Fate line sitting BETWEEN two comments", () => {
+    // The trailing comment is what makes this test able to fail. Without it,
+    // a greedy implementation (`lastIndexOf("-->")`) finds the same closer as
+    // a correct one and the assertion cannot tell them apart — verified by
+    // mutation: with a single comment, `lastIndexOf` left all tests green.
+    //
+    // With a second comment the two readings diverge. Correct: two spans are
+    // removed and `**Fate:** PORT` survives between them, exactly as a
+    // reviewer sees it. Greedy: one span swallows first-open to last-close,
+    // the Fate line vanishes, and a real absorption ships unscored.
+    const r = runGuard(
+      "<!-- note --> **Fate:** PORT <!-- trailing -->\n\nno score",
+      "kernel: something",
+    );
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/No Absorption Score found/);
+  });
+
+  it("treats an unterminated comment as running to the end, like HTML does", () => {
+    // GitHub renders nothing after an unclosed `<!--`. The guard must read the
+    // same document the reviewer does, so this claims no Fate either.
+    const r = runGuard("real text\n<!-- oops\n**Fate:** PORT", "kernel: something");
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/Not an absorption PR/);
+  });
+
   it("looks for capabilities under kernel/capabilities/, the path they are actually at", () => {
     // Source assertion: `capabilities/` matched nothing in this repo, so both
     // the one-repo-per-PR check and file-based detection were dead code.

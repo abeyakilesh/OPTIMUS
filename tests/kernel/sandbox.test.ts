@@ -38,6 +38,7 @@ function cap(id: string, permissions: string[], isolation?: Isolation): Capabili
       isolation,
       inputConstraints: {}, // takes no input; {} means "must be empty", not "anything goes"
       outputs: {}, // and returns none either
+      outputTrust: {},
       defaultBudget: { maxAttempts: 1, maxWallTimeMs: 1000, maxCost: 1 },
       description: "fixture",
     },

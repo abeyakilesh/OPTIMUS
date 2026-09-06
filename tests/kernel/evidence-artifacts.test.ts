@@ -29,6 +29,7 @@ const repeater: Capability = {
     isolation: {},
     inputConstraints: {},
     outputs: { artifactId: ARTIFACT_ID_OUTPUT },
+    outputTrust: { artifactId: "capability" },
     defaultBudget: { maxAttempts: 1, maxWallTimeMs: 2_000, maxCost: 5 },
     description: "stores a constant body and returns its artifact id",
   },
@@ -105,6 +106,12 @@ describe("evidence records what a step produced, not only what it newly wrote", 
             },
           },
         },
+        // Trust is per TOP-LEVEL field, so the whole nested `result` carries
+        // one level. That is a real limit of the fifth leg and it is the right
+        // trade here: a `$from` reference cannot reach inside a value anyway
+        // (one dot, no paths), so a finer grain would describe something no
+        // reference can name.
+        outputTrust: { result: "capability" },
       },
       async run(_input, ctx) {
         const id = await ctx.putArtifact("nested payload");
@@ -149,6 +156,9 @@ describe("evidence records what a step produced, not only what it newly wrote", 
           other: { kind: "string" },
           text: { kind: "string" },
         },
+        // Overriding `outputs` without this is now a registration error, which
+        // is the fifth leg catching the same drift #66 caught in the fourth.
+        outputTrust: { note: "capability", other: "capability", text: "capability" },
       },
       async run() {
         return {
