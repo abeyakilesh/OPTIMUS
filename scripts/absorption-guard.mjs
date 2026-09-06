@@ -41,8 +41,45 @@ const title = process.env.PR_TITLE ?? "";
  * line commented out and a real absorption sailing through unscored.
  *
  * A comment is not a claim. Everything below reads this, never `rawBody`.
+ *
+ * WHY THIS IS A SCANNER AND NOT `.replace(/<!--[\s\S]*?-->/g, "")`. That was
+ * the first version and CodeQL failed it HIGH —
+ * `js/incomplete-multi-character-sanitization`: a single pass that removes a
+ * multi-character delimiter can leave the opener behind. The rule is written
+ * for HTML sanitisation and this is not rendering HTML, so it was tempting to
+ * call it a false positive and move on. That reasoning — correct observation,
+ * convenient conclusion — is the one this repo has a rule about.
+ *
+ * The rewrite is not defensive paperwork either. It pins the SEMANTICS, which
+ * the regex only got right by accident:
+ *
+ *   · Comments DO NOT NEST. `<!-- a <!-- b --> c -->` ends at the FIRST
+ *     `-->`, leaving ` c -->` as visible text. A greedy regex would have
+ *     swallowed the lot and hidden text a reviewer can plainly see.
+ *   · An UNCLOSED `<!--` runs to the end of the document, which is what HTML
+ *     does and what GitHub renders — everything after it is invisible.
+ *
+ * Matching what the reviewer SEES is the whole point: the guard and the human
+ * must be reading the same document. And the fail-safe direction holds — a
+ * body that hides a Fate line behind an unclosed comment also hides it from
+ * the reviewer, so no absorption is being claimed; the file-based detector
+ * (`added` under `kernel/capabilities/`) still fires regardless, because it
+ * reads the diff and cannot be spoofed by body text at all.
  */
-const body = rawBody.replace(/<!--[\s\S]*?-->/g, "");
+function stripHtmlComments(s) {
+  let out = "";
+  let i = 0;
+  for (;;) {
+    const open = s.indexOf("<!--", i);
+    if (open === -1) return out + s.slice(i);
+    out += s.slice(i, open);
+    const close = s.indexOf("-->", open + 4);
+    if (close === -1) return out; // unterminated: the rest is comment
+    i = close + 3;
+  }
+}
+
+const body = stripHtmlComments(rawBody);
 
 const errors = [];
 const warnings = [];
