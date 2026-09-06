@@ -167,6 +167,26 @@ export const browserNavigate: Capability = {
       error: { kind: "string" },
       artifactId: ARTIFACT_ID_OUTPUT,
     },
+    // The capability that motivated per-field trust in #70. Three of these
+    // fields are the page talking and three are the kernel talking, and a
+    // single level for the whole capability would have had to lie about one
+    // group or cripple the other.
+    //
+    //   · `title` and `text` are authored by whoever controls the page.
+    //   · `url` is untrusted too, and it is the one people get wrong: it is
+    //     the address AFTER redirects, so the destination chose it, not us.
+    //     The input `url` was ours; this one is a result.
+    //   · `ok` is our bridge's verdict on whether navigation completed,
+    //     `error` is our bridge's own message, and `artifactId` is a hash
+    //     computed on this side. A page cannot set any of the three.
+    outputTrust: {
+      ok: "capability",
+      url: "untrusted",
+      title: "untrusted",
+      text: "untrusted",
+      error: "capability",
+      artifactId: "capability",
+    },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 45_000, maxCost: 20 },
     description:
       "Navigates a real, headless Chromium-family browser to a URL via " +

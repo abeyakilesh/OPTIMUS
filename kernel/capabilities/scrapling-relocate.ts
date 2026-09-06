@@ -105,6 +105,22 @@ export const scraplingRelocate: Capability = {
       matches: { kind: "array", required: true, of: FINGERPRINT_SHAPE },
       artifactId: ARTIFACT_ID_OUTPUT,
     },
+    // `matches` carries page-authored strings — tag names, attribute values,
+    // text content lifted straight out of `pageHtml`. The SCORES beside them
+    // are ours: `found`, `score` and `percentage` are computed by the ported
+    // algorithm in kernel/scrapling.ts out of comparisons it performed.
+    //
+    // The distinction is worth being exact about, because "we computed a
+    // number ABOUT untrusted input" and "we returned untrusted input" look
+    // similar and are not. A similarity score cannot carry an injection; the
+    // element text it scored can.
+    outputTrust: {
+      found: "capability",
+      score: "capability",
+      percentage: "capability",
+      matches: "untrusted",
+      artifactId: "capability",
+    },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 5000, maxCost: 5 },
     description:
       "Finds the element matching a saved fingerprint on a page, surviving " +

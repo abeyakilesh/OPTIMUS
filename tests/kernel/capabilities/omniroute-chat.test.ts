@@ -172,6 +172,17 @@ describe("llm.chatSucceeded — check logic, isolated from real network calls", 
           error: { kind: "string" },
           artifactId: { kind: "string" },
         },
+        // Mirrors the narrowed `outputs` above — the real llm.chat declares
+        // `usage` and this fake does not, and outputTrust is checked against
+        // the fields actually declared rather than inherited wholesale.
+        outputTrust: {
+          ok: "capability",
+          status: "capability",
+          model: "capability",
+          content: "untrusted",
+          error: "capability",
+          artifactId: "capability",
+        },
       },
       async run() {
         return fakeOutput;

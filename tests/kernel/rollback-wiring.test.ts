@@ -38,6 +38,7 @@ function writer(id: string, files: Array<[string, string]>): Capability {
       isolation: { writeRoots: [root] },
       inputConstraints: {}, // takes no input; {} means "must be empty", not "anything goes"
       outputs: { wrote: { kind: "number", required: true, integer: true, min: 0 } },
+      outputTrust: { wrote: "capability" },
       defaultBudget: { maxAttempts: 1, maxWallTimeMs: 5_000, maxCost: 5 },
       description: "writes files, so its failure path has something to undo",
     },
@@ -124,6 +125,7 @@ describe("rollback is wired into a real step's failure path", () => {
         isolation: {},
         inputConstraints: {},
         outputs: {}, // returns {}; the empty declaration is the accurate one
+        outputTrust: {},
         defaultBudget: { maxAttempts: 1, maxWallTimeMs: 1_000, maxCost: 1 },
         description: "mutates nothing",
       },

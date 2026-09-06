@@ -174,6 +174,34 @@ export const llmChat: Capability = {
       error: { kind: "string" },
       artifactId: ARTIFACT_ID_OUTPUT,
     },
+    // `content` IS UNTRUSTED — the model's reply, and the least intuitive
+    // entry in the kernel.
+    //
+    // Nothing attacked us to produce it. It is untrusted for a plainer reason:
+    // nobody accountable wrote it. `kernel` means bytes committed to this
+    // repo, `operator` means bytes the human typed, and a completion is
+    // neither — it is generated text, shaped by whatever was in the context
+    // window, which routinely includes fetched pages this kernel has already
+    // labelled untrusted. Any weaker tag would let a model laundering
+    // attacker text into a summary hand that summary onward as trusted, and
+    // the fence around the original would have bought nothing.
+    //
+    // The rest is transport OPTIMUS observed: `status` is the HTTP code,
+    // `ok`/`error` are this adapter's verdict, `model` is the id the router
+    // reported, `usage` is a token count, `artifactId` a hash computed here.
+    //
+    // This is also why a compiled plan cannot chain two `llm.chat` steps into
+    // each other's `kernel` messages — the check refuses it structurally
+    // rather than by convention.
+    outputTrust: {
+      ok: "capability",
+      status: "capability",
+      model: "capability",
+      content: "untrusted",
+      usage: "capability",
+      error: "capability",
+      artifactId: "capability",
+    },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: DEFAULT_TIMEOUT_MS, maxCost: 20 },
     description:
       "Sends a chat completion through a local OmniRoute instance's real " +

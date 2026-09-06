@@ -45,6 +45,7 @@ import {
   type InputConstraint,
   type UrlConstraint,
 } from "./inputContract";
+import { TRUST_LEVELS, type Trust } from "./provenance";
 
 /** Every constraint kind except the two that exist to restrict rather than describe. */
 export type OutputConstraint = Exclude<InputConstraint, UrlConstraint | ExecutableConstraint>;
@@ -114,3 +115,141 @@ export const ARTIFACT_ID_OUTPUT = {
   minLength: 71,
   maxLength: 71,
 } as const satisfies OutputConstraint;
+
+/* ---------------------------------------------------------------------------
+ * Gate 8, FIFTH leg — the TRUST of what comes back.
+ *
+ * `outputs` above says what SHAPE a value has. It says nothing about who
+ * authored the bytes, and that is a different question with a different
+ * consequence: `browser.navigate` returns `text: string` whether the page was
+ * written by the operator's own docs or by an attacker.
+ *
+ * WHY THIS COULD NOT EXIST BEFORE #69. `llm.chat` has required a `trust` tag
+ * on every message since #65, fail-closed at the manifest door. What that
+ * cannot do is tell whether the tag is TRUE — a caller writing
+ * `trust: "kernel"` over a scraped paragraph satisfied it. provenance.ts says
+ * so out loud: "a caller that tags fetched web content as `kernel` is lying,
+ * and nothing here detects that". Step data flow changed the shape of the
+ * problem, because a value now arrives by reference and the kernel knows, at
+ * plan time, exactly which capability produced it. This is the declaration
+ * that turns that knowledge into a check (see `validateReferences`).
+ *
+ * PER FIELD, NOT PER CAPABILITY — the open question in #70, answered the
+ * expensive way because the cheap way is a lie. `browser.navigate` returns
+ * `ok` (the kernel's own boolean about whether its child process succeeded)
+ * and `text` (whatever the page said). A single level for the whole capability
+ * would be `untrusted`, making `ok` unusable as a check input, or
+ * `capability`, which is false about `text`. `outputs` is already keyed by
+ * field, so the honest answer is also the structurally simpler one.
+ *
+ * TWO LEVELS ARE LEGAL HERE, NOT FOUR. Refusing the other two is the same move
+ * this file already makes for `url` and `executable`: a vocabulary that admits
+ * a value it cannot mean is a vocabulary that will be used wrongly.
+ *
+ *   · `kernel` is refused. It means "authored by OPTIMUS itself: system
+ *     policy, prompts committed to this repo", and it is the ONLY level
+ *     `mayInstruct` returns true for. A return value is computed at run time
+ *     out of inputs the kernel did not write. Letting a manifest declare one
+ *     `kernel` would let any capability MINT instruction-bearing content by
+ *     returning it — the precise escalation this leg exists to prevent.
+ *   · `operator` is refused. It means "typed by the human running the
+ *     mission". Nothing a capability returns was typed by anyone.
+ *
+ * So an output field is `capability` (computed by the capability over what it
+ * was handed — trusted as a VALUE, never as an instruction) or `untrusted`
+ * (the bytes came from outside the boundary).
+ * ------------------------------------------------------------------------ */
+
+/** The trust levels an OUTPUT field may declare. See the block above for the two refusals. */
+export const OUTPUT_TRUST_LEVELS = ["capability", "untrusted"] as const;
+
+export type OutputTrustLevel = (typeof OUTPUT_TRUST_LEVELS)[number];
+
+/**
+ * Per-field trust for a capability's output. REQUIRED and EXHAUSTIVE, checked
+ * both directions at registration — see `assertOutputTrust`.
+ *
+ * There is no default. "Untrusted by default" was the other candidate and it
+ * loses for the reason `inputConstraints` is required rather than optional:
+ * a field that can be omitted becomes a field nobody revisits, and the
+ * omission reads as "safe" long after it stopped being true. Making the
+ * manifest author write `untrusted` next to `text` is the entire mechanism.
+ */
+export type OutputTrust = Readonly<Record<string, OutputTrustLevel>>;
+
+/** Kept honest against provenance.ts rather than duplicating its list. */
+const REFUSED_FOR_OUTPUT: readonly Trust[] = TRUST_LEVELS.filter(
+  (level): level is Trust => !(OUTPUT_TRUST_LEVELS as readonly string[]).includes(level),
+);
+
+const WHY_REFUSED: Record<string, string> = {
+  kernel:
+    `"kernel" is the only level that may instruct the kernel, and it means bytes OPTIMUS itself ` +
+    `authored — committed policy, not a run-time return value. A capability that could declare it ` +
+    `would mint instructions by returning them`,
+  operator: `"operator" means text the human running the mission typed. A capability returns nothing the operator typed`,
+};
+
+/**
+ * Throws unless every declared output field has a trust level and every trust
+ * entry names a declared output field. Called by the broker at registration.
+ *
+ * BOTH DIRECTIONS, deliberately. One direction catches the field somebody
+ * added to `outputs` and forgot to classify — the dangerous one. The other
+ * catches a trust entry left behind for a field that no longer exists, which
+ * is harmless at run time and is exactly how a manifest starts describing a
+ * capability that no longer matches it. THE SELF-DESCRIPTION RULE: the two
+ * halves are one claim, so they are checked against each other, not read.
+ */
+export function assertOutputTrust(outputs: OutputConstraints, trust: OutputTrust, at: string): void {
+  if (!trust || typeof trust !== "object" || Array.isArray(trust)) {
+    throw new InputContractError(
+      `${at}: outputTrust must be an object (use {} for a capability that returns nothing)`,
+    );
+  }
+
+  for (const field of Object.keys(outputs)) {
+    const level = trust[field];
+    if (level === undefined) {
+      throw new InputContractError(
+        `${at}: output "${field}" has no outputTrust. Every returned field declares whether it was ` +
+          `computed here ("capability") or came from outside the boundary ("untrusted"). ` +
+          `There is no default — see kernel/outputContract.ts`,
+      );
+    }
+    if (!(OUTPUT_TRUST_LEVELS as readonly string[]).includes(level)) {
+      const why = WHY_REFUSED[level as string];
+      throw new InputContractError(
+        `${at}: output "${field}" declares trust "${level}", which is not legal for an output. ` +
+          (why
+            ? `${why}. Use "capability" or "untrusted"`
+            : `Legal values are ${OUTPUT_TRUST_LEVELS.join(" | ")}`),
+      );
+    }
+  }
+
+  for (const field of Object.keys(trust)) {
+    if (!Object.prototype.hasOwnProperty.call(outputs, field)) {
+      const declared = Object.keys(outputs);
+      throw new InputContractError(
+        `${at}: outputTrust names "${field}", which is not a declared output. ` +
+          (declared.length ? `It returns: ${declared.join(", ")}` : "It returns nothing"),
+      );
+    }
+  }
+}
+
+/**
+ * The trust of one output field, fail-closed.
+ *
+ * Registration already proves every field has an entry, so the fallback is
+ * unreachable through the broker. It is here for the one caller that can ask
+ * about a field the manifest never declared — and answering "untrusted" to a
+ * question about an unknown field is the only safe answer.
+ */
+export function trustOfOutput(trust: OutputTrust, field: string): OutputTrustLevel {
+  return trust[field] ?? "untrusted";
+}
+
+/** Names the refused levels for tests and error prose, without a second hardcoded list. */
+export const OUTPUT_TRUST_REFUSED = REFUSED_FOR_OUTPUT;

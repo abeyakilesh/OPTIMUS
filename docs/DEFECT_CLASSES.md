@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **80 classes · 68 with a real detection mechanism · 12 UNDETECTED**
+> **82 classes · 69 with a real detection mechanism · 13 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -782,6 +782,30 @@ The #68 instances add a second, sharper reason, worth stating on its own: **an a
 **Why it survived:** `git status` showed it as untracked, which reads as handled.
 
 **Detection:** `.gitignore` :: `CLAUDE.md`; `tests/unit/build-bible.test.ts` :: *is ignored, not merely untracked*
+
+---
+
+### `self-asserted-provenance`
+
+**Looks like:** A value travels with a label describing where it came from, and the label is written by whoever is passing the value rather than derived from where it actually came from. The label reads as a fact and is a claim.
+
+**Instances:** PR #65 — `llm.chat` made `trust` required on every message and fail-closed at the manifest door, and provenance.ts said out loud that it could not tell a true tag from a false one: *"a caller that tags fetched web content as `kernel` is lying, and nothing here detects that."* The gap was recorded as #64's CEILING and stayed open through two further kernel PRs. PR #70 — closed for the one route the kernel can see: a `$from` reference whose producing capability declares that field `untrusted` may no longer be carried under a better tag.
+
+**Why it survived:** The required field was the visible half of the work and it was real — omission genuinely stopped defaulting to trusted. A required field that is always *present* looks finished, and "present" and "true" are different properties that the same red check covers up. Nothing could verify the tag until the kernel independently knew a value's origin, which needed step data flow (#69) and a manifest declaration of output trust (#70) to exist first.
+
+**Detection:** `kernel/references.ts` :: `assertTrustNotLaundered`; `kernel/broker.ts` :: `assertOutputTrustContract`; `tests/kernel/output-trust.test.ts` :: *mutation — removing the check accepts a kernel-tagged untrusted field*. **Partial by construction:** it covers values that arrive by declared reference, not values that pass through the artifact store, a hand-written literal, or a capability that does not use the kernel's provenance shape. Trust does not propagate; the three routes are enumerated in `assertTrustNotLaundered`.
+
+---
+
+### `purity-mistaken-for-trust`
+
+**Looks like:** A function is correctly identified as pure — no permissions, deterministic, same input to same output — and its *return value* is treated as trustworthy on that basis. Purity is a property of the code; trust is a property of the bytes.
+
+**Instances:** #70 — `html.extractTitle` holds no permissions and does nothing but run one regex, and its manifest described it as a pure transformation. The string it returns is whatever a fetched web page put between two tags. The issue named the tension directly: *"that title is untrusted — but the manifest says extract is pure."* Both statements were true simultaneously, which is what made it hard to see.
+
+**Why it survived:** Every reason to trust the function was correct and verifiable, and none of them were about the data. The permission list — the kernel's usual signal for "how dangerous is this" — reads `[]`, which is maximally reassuring and entirely irrelevant to the question.
+
+**Detection:** `kernel/outputContract.ts` :: `assertOutputTrust` forces a per-field level on every declared output, so the classification is a decision the manifest author makes rather than an inference from the permission list. **UNDETECTED for correctness** — nothing verifies that a declared level is *true*, and a manifest calling `html.extractTitle.title` `capability` would register cleanly. That is the weakest joint in the mechanism and it is stated at the declaration site.
 
 ---
 
