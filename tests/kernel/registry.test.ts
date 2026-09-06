@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { ALL_CAPABILITIES, ALL_CHECKS, buildBroker } from "../../kernel/registry";
 import type { Capability, CapabilityManifest } from "../../kernel/types";
+import { OUTPUT_TRUST_LEVELS } from "../../kernel/outputContract";
 
 /**
  * One registry, every consumer reads it, and these tests assert they agree.
@@ -52,6 +53,16 @@ const MANIFEST_FIELD_PRESENT: Record<
   permissions: (m) => Array.isArray(m.permissions),
   inputConstraints: (m) => isRecord(m.inputConstraints),
   outputs: (m) => isRecord(m.outputs),
+  // Not `isRecord`, though that would have compiled and is what the block
+  // above warns about. The claim worth asserting is that the two halves AGREE:
+  // every declared output has a level, and every level is one an output may
+  // legally hold. A `{}` here beside three declared outputs is the exact
+  // omission #70 exists to prevent, and `isRecord({})` is true.
+  outputTrust: (m) =>
+    isRecord(m.outputTrust) &&
+    Object.keys(m.outputs).every((f) =>
+      (OUTPUT_TRUST_LEVELS as readonly string[]).includes(m.outputTrust[f]),
+    ),
   defaultBudget: (m) => isRecord(m.defaultBudget),
   description: (m) => typeof m.description === "string",
 };

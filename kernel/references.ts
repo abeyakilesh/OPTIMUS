@@ -38,9 +38,22 @@
 
 import type { Broker } from "./broker";
 import type { MissionSpec } from "./types";
+import { trustOfOutput } from "./outputContract";
 
 /** The one key. Exported so a test cannot drift from the implementation. */
 export const REFERENCE_KEY = "$from";
+
+/**
+ * The key that makes an object a `Provenance` (kernel/provenance.ts) — a value
+ * travelling with a statement about who authored it.
+ *
+ * The trust check below keys off THIS SHAPE, not off the string "llm.chat".
+ * That is deliberate and it is the difference between a rule and a special
+ * case: any capability that accepts the kernel's own provenance shape gets the
+ * check for free the day it registers, and nothing in this file has to know
+ * which capabilities talk to models.
+ */
+export const TRUST_KEY = "trust";
 
 export class PlanReferenceError extends Error {}
 
@@ -48,6 +61,24 @@ export class PlanReferenceError extends Error {}
 export interface ParsedReference {
   stepId: string;
   field: string;
+}
+
+/** A reference found in an input, with where it sat and what it sat beside. */
+export interface FoundReference {
+  at: string;
+  ref: ParsedReference;
+  /**
+   * The `trust` value of the object this reference sits DIRECTLY inside, when
+   * that object carries one. `undefined` means the reference is not in a
+   * trust-tagged position, which is the common and legitimate case —
+   * `html.extractTitle` takes an `artifactId`, not a provenance-wrapped value.
+   *
+   * Deliberately `unknown`: whatever the plan wrote goes here verbatim,
+   * including a wrong type. Narrowing it to `Trust` would be an assertion
+   * about model-authored JSON, which is the construct this file's header
+   * refuses to build.
+   */
+  declaredTrust?: unknown;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -115,18 +146,27 @@ export function referencesIn(
   input: unknown,
   at = "input",
   depth = 0,
-  found: Array<{ at: string; ref: ParsedReference }> = [],
-): Array<{ at: string; ref: ParsedReference }> {
+  found: FoundReference[] = [],
+  siblingTrust?: unknown,
+): FoundReference[] {
   if (depth > 12) throw new PlanReferenceError(`${at}: input nests deeper than 12`);
   if (holdsReferenceKey(input)) {
-    found.push({ at, ref: parseReference(input, at) });
+    found.push({ at, ref: parseReference(input, at), declaredTrust: siblingTrust });
     return found;
   }
   if (Array.isArray(input)) {
+    // Elements do NOT inherit the enclosing object's tag. `messages` is an
+    // array whose ELEMENTS each carry their own `trust`; letting a tag reach
+    // across the array boundary would let one message's tag speak for another.
     input.forEach((item, i) => referencesIn(item, `${at}[${i}]`, depth + 1, found));
   } else if (isPlainObject(input)) {
+    // Immediate children only. A nested object recomputes its own tag below,
+    // so a tag never travels further than the object that stated it.
+    const tag = Object.prototype.hasOwnProperty.call(input, TRUST_KEY)
+      ? input[TRUST_KEY]
+      : undefined;
     for (const key of Object.keys(input)) {
-      referencesIn(input[key], `${at}.${key}`, depth + 1, found);
+      referencesIn(input[key], `${at}.${key}`, depth + 1, found, tag);
     }
   }
   return found;
@@ -142,12 +182,16 @@ export function referencesIn(
  *
  * The fourth is the structural kill of facade #2: a reference to a step this
  * one does not depend on is not a data flow, it is a race.
+ *
+ * The sixth is #70: a reference to an UNTRUSTED output may not be carried
+ * under a better trust tag than it deserves. See `assertTrustNotLaundered` —
+ * including the three routes it deliberately does not cover.
  */
 export function validateReferences(spec: MissionSpec, broker: Broker): void {
   const byId = new Map(spec.steps.map((s) => [s.id, s]));
 
   for (const step of spec.steps) {
-    for (const { at, ref } of referencesIn(step.input, `${step.id}.input`)) {
+    for (const { at, ref, declaredTrust } of referencesIn(step.input, `${step.id}.input`)) {
       const producer = byId.get(ref.stepId);
       if (!producer) {
         throw new PlanReferenceError(`${at}: no step "${ref.stepId}" in this mission`);
@@ -162,7 +206,8 @@ export function validateReferences(spec: MissionSpec, broker: Broker): void {
         );
       }
 
-      const outputs = broker.manifest(producer.capabilityId).outputs;
+      const producerManifest = broker.manifest(producer.capabilityId);
+      const outputs = producerManifest.outputs;
       if (!Object.prototype.hasOwnProperty.call(outputs, ref.field)) {
         const declared = Object.keys(outputs);
         throw new PlanReferenceError(
@@ -170,8 +215,70 @@ export function validateReferences(spec: MissionSpec, broker: Broker): void {
             (declared.length ? `It returns: ${declared.join(", ")}.` : "It returns nothing."),
         );
       }
+
+      assertTrustNotLaundered(at, producer.capabilityId, ref.field, declaredTrust, producerManifest);
     }
   }
+}
+
+/**
+ * The sixth check, and the one #70 exists for: a value whose bytes came from
+ * outside the boundary may not be carried into a trust-tagged position under a
+ * better tag than it deserves.
+ *
+ * WHAT IT REFUSES — under-tagging, and only that:
+ *
+ *   { "role": "user",
+ *     "content": { "$from": "fetch.text" },   ← declared untrusted by its producer
+ *     "trust": "kernel" }                     ← refused HERE, at plan time
+ *
+ * Over-tagging is allowed on purpose. A `capability` field carried under
+ * `trust: "untrusted"` gets fenced for the model and loses nothing but
+ * fidelity; refusing it would punish caution and give a plan author a reason
+ * to reach for the weaker tag.
+ *
+ * THE HONEST LIMIT, and it is not small. This checks what the PLAN DECLARES,
+ * not every route a byte can take. Three ways around it, all real:
+ *
+ *   1. An artifact id. `web.fetch` returns `artifactId` (a `capability`-level
+ *      content address, correctly), a later step reads the artifact and
+ *      returns its contents, and the untrusted bytes arrive with whatever
+ *      that step's manifest claims. Trust does not PROPAGATE through the
+ *      artifact store — the manifest author has to declare the downstream
+ *      field `untrusted` themselves, and nothing here checks that they did.
+ *   2. A hand-written literal. A caller who pastes scraped text into a plan as
+ *      a string with `trust: "kernel"` is lying and there is no reference to
+ *      catch them by — that limit is stated in provenance.ts and is unchanged.
+ *   3. A capability that consumes untrusted content without using the kernel's
+ *      provenance shape gets no check at all, because there is no sibling tag
+ *      to compare against.
+ *
+ * What it does close is the one route a MODEL can author, which is the route
+ * that matters now that a plan compiler exists: a compiled plan cannot wire
+ * `web.fetch` into `llm.chat` and call the result trusted.
+ */
+function assertTrustNotLaundered(
+  at: string,
+  producerId: string,
+  field: string,
+  declaredTrust: unknown,
+  producerManifest: { outputTrust: Parameters<typeof trustOfOutput>[0] },
+): void {
+  // Not a trust-tagged position — nothing claims anything, so nothing lies.
+  if (declaredTrust === undefined) return;
+
+  const actual = trustOfOutput(producerManifest.outputTrust, field);
+  if (actual !== "untrusted") return;
+  if (declaredTrust === "untrusted") return;
+
+  throw new PlanReferenceError(
+    `${at}: "${producerId}" declares its output "${field}" as untrusted — bytes that originated ` +
+      `outside the boundary — but this reference sits in a position tagged ` +
+      `${TRUST_KEY}: ${JSON.stringify(declaredTrust)}. A reference to an untrusted output must be ` +
+      `carried as ${TRUST_KEY}: "untrusted", so the content is fenced and labelled before a model ` +
+      `sees it. Tagging it otherwise would present attacker-authored text as though OPTIMUS or the ` +
+      `operator had written it`,
+  );
 }
 
 /**

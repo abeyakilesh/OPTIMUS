@@ -10,7 +10,7 @@
 import type { Budget, Capability, CapabilityManifest, Check } from "./types";
 import type { Isolation } from "./sandbox";
 import { assertConstraints, checkInput } from "./inputContract";
-import { assertOutputs, checkOutput } from "./outputContract";
+import { assertOutputs, assertOutputTrust, checkOutput } from "./outputContract";
 
 export class BrokerError extends Error {}
 
@@ -102,6 +102,27 @@ function assertOutputContract(manifest: CapabilityManifest): void {
   assertOutputs(manifest.outputs, manifest.id);
 }
 
+/**
+ * Gate 8, fifth leg, enforced at registration: every field a manifest says it
+ * returns must also say who authored it.
+ *
+ * Absent is refused rather than defaulted to `untrusted`, even though
+ * `untrusted` is the safe value. A default this important becomes invisible:
+ * the manifest reads as complete, the field reads as classified, and the one
+ * person who could have known that `text` is attacker-authored never had to
+ * say so. Refusing here is what makes the classification a decision.
+ */
+function assertOutputTrustContract(manifest: CapabilityManifest): void {
+  if (manifest.outputTrust === undefined) {
+    throw new BrokerError(
+      `${manifest.id}: manifest declares no outputTrust. Every returned field says whether it was ` +
+        `computed here ("capability") or came from outside the boundary ("untrusted"). A capability ` +
+        `that returns nothing declares {}`,
+    );
+  }
+  assertOutputTrust(manifest.outputs, manifest.outputTrust, manifest.id);
+}
+
 export class Broker {
   private readonly capabilities = new Map<string, Capability>();
   private readonly checks = new Map<string, Check>();
@@ -117,6 +138,7 @@ export class Broker {
     assertBoundedRadius(manifest);
     assertInputContract(manifest);
     assertOutputContract(manifest);
+    assertOutputTrustContract(manifest);
     this.capabilities.set(manifest.id, capability);
   }
 

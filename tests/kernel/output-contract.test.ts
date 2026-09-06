@@ -26,15 +26,32 @@ import type { Capability, CapabilityManifest, Check } from "../../kernel/types";
 const budget = { maxAttempts: 1, maxWallTimeMs: 2_000, maxCost: 5 };
 
 function manifest(over: Partial<CapabilityManifest> = {}): CapabilityManifest {
-  return {
+  const base: CapabilityManifest = {
     id: "test.cap",
     version: "1.0.0",
     permissions: [],
     inputConstraints: {},
     outputs: {},
+    outputTrust: {},
     defaultBudget: budget,
     description: "fixture",
     ...over,
+  };
+  // The SUBJECT of this suite is the output door's shape checking, and every
+  // fixture below varies `outputs` to exercise it. Deriving trust from
+  // whatever `outputs` ends up being keeps that variation the only variable —
+  // stating a level per fixture would add a second thing to keep in sync for
+  // no gain, and getting it wrong would fail these tests for the wrong reason.
+  //
+  // `capability` is the right derived value precisely because it is the
+  // WEAKER claim to make about a fixture: it asserts nothing came from outside
+  // the boundary, which is true of every canned return in this file. #70's own
+  // suite is where trust varies, and it states every level explicitly.
+  return {
+    ...base,
+    outputTrust:
+      over.outputTrust ??
+      Object.fromEntries(Object.keys(base.outputs).map((f) => [f, "capability" as const])),
   };
 }
 
@@ -293,14 +310,24 @@ describe("mutation: the tests above fail when the door is removed", () => {
     }
   }
 
-  it("REGISTRATION: without assertOutputContract, a manifest with no outputs registers fine", async () => {
+  // Both registration checks, because #70 added a second one that refuses the
+  // same manifest for a different reason: `assertOutputContract` refuses the
+  // missing `outputs`, `assertOutputTrustContract` refuses the missing
+  // `outputTrust`. Removing only the first would leave the second failing the
+  // registration and the mutation would prove nothing — the anti-rot guard
+  // above catches a renamed target, not a second door that has grown beside it.
+  it("REGISTRATION: without the output-door checks, a manifest with no outputs registers fine", async () => {
     await withMutant(
       join("kernel", "broker.ts"),
-      [[/^\s*assertOutputContract\(manifest\);$/m, ""]],
+      [
+        [/^\s*assertOutputContract\(manifest\);$/m, ""],
+        [/^\s*assertOutputTrustContract\(manifest\);$/m, ""],
+      ],
       async (url) => {
         const mutant = (await import(url)) as { Broker: new () => Broker };
         const noOutputs = manifest();
         delete (noOutputs as Partial<CapabilityManifest>).outputs;
+        delete (noOutputs as Partial<CapabilityManifest>).outputTrust;
         // THE ASSERTION THAT MAKES THE REGISTRATION TESTS REAL.
         expect(() =>
           new mutant.Broker().register({ manifest: noOutputs, async run() { return {}; } }),

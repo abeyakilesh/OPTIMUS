@@ -36,6 +36,21 @@ export const webFetch: Capability = {
       artifactId: ARTIFACT_ID_OUTPUT,
       bytes: { kind: "number", required: true, integer: true, min: 0 },
     },
+    // THE CAPABILITY THAT REACHES THE INTERNET DECLARES NO UNTRUSTED OUTPUT,
+    // and that is correct rather than an oversight worth reading twice.
+    // Neither field IS the response: `artifactId` is a SHA-256 this kernel
+    // computed over the body, `bytes` is its length. Both are facts OPTIMUS
+    // established about the bytes, not the bytes.
+    //
+    // The body itself is untrusted and it leaves through the artifact store,
+    // where no `$from` reference can see it. That is limit #1 in
+    // `assertTrustNotLaundered`, stated concretely: whichever capability READS
+    // this artifact is the one that must declare its output untrusted —
+    // `html.extractTitle` immediately below does exactly that.
+    outputTrust: {
+      artifactId: "capability",
+      bytes: "capability",
+    },
     defaultBudget: { maxAttempts: 3, maxWallTimeMs: 30 * ONE_SECOND, maxCost: 10 },
     description: "Fetch a URL and store the response body as an artifact.",
   },
@@ -72,6 +87,28 @@ export const htmlExtractTitle: Capability = {
     outputs: {
       title: { kind: "string", required: true },
       artifactId: ARTIFACT_ID_OUTPUT,
+    },
+    // `title` IS UNTRUSTED, and this is the exact case #70 was filed about:
+    //
+    //   "If html.extractTitle reads an untrusted artifact and returns a title,
+    //    that title is untrusted — but the manifest says extract is pure."
+    //
+    // Both halves are true and they are not in tension. The FUNCTION is pure:
+    // no permissions, one regex, same input to same output forever. The VALUE
+    // is whatever a web page put between two tags. Purity is a statement about
+    // the code, trust is a statement about the bytes, and reading the first as
+    // the second is how attacker-authored text acquires a clean label.
+    //
+    // Trust does not propagate on its own here (see `assertTrustNotLaundered`),
+    // so this line IS the propagation — declared by the person who knows where
+    // the artifact came from, checked by nobody. Stated plainly because it is
+    // the weakest joint in the mechanism.
+    //
+    // `artifactId` is the address of the title this capability just stored: a
+    // hash computed here, like every other content address.
+    outputTrust: {
+      title: "untrusted",
+      artifactId: "capability",
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 5 * ONE_SECOND, maxCost: 5 },
     description: "Extract the <title> text from a stored HTML artifact.",
