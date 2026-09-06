@@ -92,7 +92,10 @@ export function createContext(options: BoundaryOptions): CapabilityContext {
 
     // The artifact store is the kernel's own surface, not the outside world:
     // writing an artifact is how a capability returns bytes, so it needs no
-    // fs permission. Escaping the store is prevented by content-addressing.
+    // fs permission. Escaping the store is prevented by `assertWellFormedId`,
+    // which rejects any id that is not a bare sha256 address before it can
+    // reach a path — NOT by content-addressing in general, which is about
+    // what an id means rather than where it can point (#60).
     async putArtifact(data: string): Promise<ArtifactId> {
       return store.put(data);
     },

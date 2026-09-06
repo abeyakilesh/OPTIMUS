@@ -217,10 +217,19 @@ export interface RelocateResult {
  * — never just the first — provided that score clears `percentage` (upstream
  * default: 40).
  */
-export function relocate(
+/**
+ * The best-scoring candidate on the page, WITHOUT applying a threshold.
+ *
+ * New surface, not a change to the port: `relocate` below still returns
+ * `undefined` under its threshold, exactly as upstream does, and the golden
+ * fixtures still prove that. This exists because the threshold discards the
+ * one number a caller needs to react — how close it actually got. A capability
+ * reporting `score: 0` for "nothing cleared 80" is reporting a sentinel as if
+ * it were a measurement.
+ */
+export function bestMatch(
   fingerprint: ElementFingerprint,
   pageHtml: string,
-  percentage = 40,
 ): RelocateResult | undefined {
   const root = parseFragmentLikeLxml(pageHtml);
   const scoreTable = new Map<number, Element[]>();
@@ -235,9 +244,17 @@ export function relocate(
   if (scoreTable.size === 0) return undefined;
 
   const highest = Math.max(...scoreTable.keys());
-  if (highest < percentage) return undefined;
-
   return { matches: scoreTable.get(highest)!, score: highest };
+}
+
+export function relocate(
+  fingerprint: ElementFingerprint,
+  pageHtml: string,
+  percentage = 40,
+): RelocateResult | undefined {
+  const best = bestMatch(fingerprint, pageHtml);
+  if (!best || best.score < percentage) return undefined;
+  return best;
 }
 
 /** Convenience: fingerprint the first matching descendant element (or root) of a page. */

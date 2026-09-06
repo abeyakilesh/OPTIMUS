@@ -33,10 +33,14 @@ import { createHash } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
-const MANIFEST = "kernel/fixtures/goldens.json";
+// Overridable so tests can point at a temp copy. Its own tests mutate goldens
+// to prove the gate can fail, and vitest runs test FILES in parallel — mutating
+// the real fixture raced tests/kernel/sequence-matcher.test.ts, which reads the
+// same golden and briefly saw expected: 0.999. A mutation test that writes
+// shared state is a flake generator for every suite that reads it.
+const MANIFEST = process.env.FIDELITY_MANIFEST ?? "kernel/fixtures/goldens.json";
 
 const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
-const canonical = (obj) => JSON.stringify(obj, Object.keys(obj).sort ? undefined : undefined, 2);
 
 const errors = [];
 const notes = [];

@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { Capability, Check, CheckResult } from "../../types";
+import { ARTIFACT_ID_OUTPUT } from "../../outputContract";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BRIDGE_PATH = join(HERE, "bridge.py");
@@ -149,6 +150,22 @@ export const browserNavigate: Capability = {
       // reviewable manifest change rather than a runtime surprise.
       chromeExecutablePath: { kind: "executable", required: true, allowed: ALLOWED_CHROME },
       headless: { kind: "boolean" },
+    },
+    // The bridge's two exit shapes, read off bridge.py rather than off
+    // BrowserNavigateOutput: {ok, url, title, text} on success, {ok, error} on
+    // any failure. So `ok` is the only field true on both paths.
+    //
+    // The closed field set earns more here than anywhere else in the kernel:
+    // this output is JSON parsed from a CHILD PROCESS the kernel does not
+    // sandbox. An extra key appearing in it is a change in something outside
+    // this repo, and it now fails the step by name instead of flowing onward.
+    outputs: {
+      ok: { kind: "boolean", required: true },
+      url: { kind: "string" },
+      title: { kind: "string" },
+      text: { kind: "string" },
+      error: { kind: "string" },
+      artifactId: ARTIFACT_ID_OUTPUT,
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 45_000, maxCost: 20 },
     description:

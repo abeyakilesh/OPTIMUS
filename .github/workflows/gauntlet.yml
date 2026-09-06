@@ -82,6 +82,13 @@ jobs:
     if: needs.filter.outputs.app == 'true'
     uses: ./.github/workflows/_perf.yml
 
+  # THE REGISTRY RULE — the defect-class registry is checked on every PR, and
+  # a PR that admits a defect without moving it goes red. Not filtered: a
+  # lesson can surface in any diff, including a docs-only one.
+  defect-registry:
+    needs: filter
+    uses: ./.github/workflows/_defect-registry.yml
+
   # GATE 11 — its own required check since #34. Runs on every PR regardless of
   # change detection: a golden can rot from an upstream change even when this
   # diff touches nothing near it, which is exactly the case a filtered gate
@@ -140,7 +147,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: always()
-    needs: [build, unit, static-security, supply-chain, fidelity, e2e, perf, ai-review, absorption]
+    needs: [build, unit, static-security, supply-chain, fidelity, defect-registry, e2e, perf, ai-review, absorption]
     steps:
       - uses: actions/checkout@v5
         with: { persist-credentials: false }

@@ -27,6 +27,12 @@ const anyManifest = (over: Partial<CapabilityManifest> = {}): CapabilityManifest
   version: "1.0.0",
   permissions: [],
   inputConstraints: {},
+  // Fixtures here return assorted shapes and the SUBJECT is the input door,
+  // so this is a `record` of anything-string-keyed rather than an accurate
+  // per-fixture declaration. Said out loud because a permissive declaration
+  // in a test is exactly the kind of thing that gets copied into a real
+  // manifest: the output door has its own suite in output-contract.test.ts.
+  outputs: { ok: { kind: "boolean" }, n: { kind: "number" }, title: { kind: "string" } },
   defaultBudget: { maxAttempts: 1, maxWallTimeMs: 1_000, maxCost: 1 },
   description: "fixture",
   ...over,
@@ -57,7 +63,7 @@ describe("a remote baseUrl is refused at the broker, not at TCP", () => {
         baseUrl: "https://api.openai.com",
         apiKey: "sk-a-real-looking-credential",
         model: "gpt-4",
-        messages: [{ role: "user", content: "hi" }],
+        messages: [{ role: "user", content: "hi", trust: "operator" }],
       },
       dependsOn: [],
       checks: ["llm.chatSucceeded"],
@@ -94,7 +100,7 @@ describe("a remote baseUrl is refused at the broker, not at TCP", () => {
         baseUrl: "https://api.openai.com",
         apiKey: "sk-a-real-looking-credential",
         model: "gpt-4",
-        messages: [{ role: "user", content: "hi" }],
+        messages: [{ role: "user", content: "hi", trust: "operator" }],
       },
       dependsOn: [],
       checks: ["llm.chatSucceeded"],
@@ -109,7 +115,7 @@ describe("a remote baseUrl is refused at the broker, not at TCP", () => {
     // passes the test above while breaking the product.
     for (const baseUrl of ["http://127.0.0.1:20128", "http://localhost:20128", "http://[::1]:20128"]) {
       expect(() =>
-        broker.validateInput("llm.chat", { baseUrl, model: "m", messages: [{ role: "user", content: "hi" }] }),
+        broker.validateInput("llm.chat", { baseUrl, model: "m", messages: [{ role: "user", content: "hi", trust: "operator" }] }),
       ).not.toThrow();
     }
     // Including the discard-port form the e2e suite pins, which is a real
@@ -119,7 +125,7 @@ describe("a remote baseUrl is refused at the broker, not at TCP", () => {
       broker.validateInput("llm.chat", {
         baseUrl: "http://127.0.0.1:9",
         model: "m",
-        messages: [{ role: "user", content: "hi" }],
+        messages: [{ role: "user", content: "hi", trust: "operator" }],
       }),
     ).not.toThrow();
   });
@@ -151,7 +157,7 @@ describe("the input contract and K4 catch the same URL at different layers", () 
         baseUrl: "https://api.openai.com",
         apiKey: "sk-a-real-looking-credential",
         model: "gpt-4",
-        messages: [{ role: "user", content: "hi" }],
+        messages: [{ role: "user", content: "hi", trust: "operator" }],
       },
       dependsOn: [],
       checks: ["llm.chatSucceeded"],
@@ -186,7 +192,7 @@ describe("the input contract and K4 catch the same URL at different layers", () 
         baseUrl: "https://api.openai.com",
         apiKey: "sk-a-real-looking-credential",
         model: "gpt-4",
-        messages: [{ role: "user", content: "hi" }],
+        messages: [{ role: "user", content: "hi", trust: "operator" }],
       },
       dependsOn: [],
       checks: ["llm.chatSucceeded"],
@@ -350,7 +356,7 @@ describe("checkInput", () => {
     // Ignoring is how a new parameter gets added to a capability and never
     // acquires a constraint.
     expect(checkInput({ a: { kind: "string" } }, { a: "x", b: "y" })).toEqual([
-      "input.b: undeclared field — this capability's manifest does not accept it",
+      "input.b: undeclared field — this capability's manifest does not declare it",
     ]);
   });
 

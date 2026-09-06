@@ -16,13 +16,20 @@
 import type { MissionSpec, MissionState, StepSpec, StepState } from "./types";
 import { EventLog, fold, type KernelEvent } from "./events";
 import { Harness, type Repair } from "./harness";
+import { referencesIn, resolveInput, validateReferences } from "./references";
 
 export class SchedulerError extends Error {}
 
 export interface SchedulerDeps {
   harness: Harness;
   now?: () => number;
-  /** Per-step repair strategies, keyed by step id or by agent name. */
+  /**
+   * Repair strategies, resolved most-specific first: step id, then agent
+   * name, then CAPABILITY id. The last is how a repair travels with the
+   * capability it understands — `scrapling.relocate` knows what to do about a
+   * missed relocation, and no caller should have to re-supply that knowledge
+   * at every call site. `kernel/registry.ts` exports ALL_REPAIRS for this.
+   */
   repairs?: Record<string, Repair>;
   /**
    * Memoised results from previous runs, keyed by input hash. A hit skips the
@@ -91,6 +98,14 @@ export class Scheduler {
 
   async run(spec: MissionSpec): Promise<MissionResult> {
     validateGraph(spec);
+    // Two different questions, both answered before anything runs. validateGraph
+    // asks whether the SHAPE is a runnable DAG; this asks whether the data flow
+    // is real — every reference names a step that exists, that this step
+    // depends on, and an output field that step's capability actually declares.
+    // The last of those became answerable in #66 and is the reason B0 came
+    // first: without it a reference could only fail at runtime, several steps
+    // into a mission, as an `undefined`.
+    validateReferences(spec, this.deps.harness.broker);
 
     const log = new EventLog();
     const emit = (event: KernelEvent): void => {
@@ -178,7 +193,7 @@ export class Scheduler {
         for (const lock of step.locks ?? []) heldLocks.add(lock);
         emit({ type: "step.started", at: this.now(), stepId: step.id, agent: step.agent });
 
-        const task = this.execute(step, emit)
+        const task = this.execute(step, emit, log)
           .then((finalStatus) => {
             status.set(step.id, finalStatus);
           })
@@ -227,18 +242,98 @@ export class Scheduler {
     return { state, log, green };
   }
 
+  /**
+   * The producing step's output, read back from the artifact store via the LOG
+   * — not from a map this scheduler holds.
+   *
+   * The distinction is the whole of D3 and it is not pedantry: a map of values
+   * lives exactly as long as this process, so a mission resumed from its log
+   * would resolve every reference to `undefined` while every gate stayed green.
+   * The log holds `evidence.outputArtifactId`; the store holds the bytes; both
+   * outlive the run.
+   */
+  private async readOutput(stepId: string, log: EventLog): Promise<unknown> {
+    for (const event of log.all()) {
+      if (event.type !== "step.finished" || event.stepId !== stepId) continue;
+      const id = event.evidence.outputArtifactId;
+      if (!id) return undefined;
+      return JSON.parse(await this.deps.harness.store.get(id));
+    }
+    return undefined;
+  }
+
+  /** The id alone, for the trace. Same source as readOutput — the log. */
+  private async outputArtifactOf(stepId: string, log: EventLog): Promise<string | undefined> {
+    for (const event of log.all()) {
+      if (event.type === "step.finished" && event.stepId === stepId) {
+        return event.evidence.outputArtifactId;
+      }
+    }
+    return undefined;
+  }
+
   private async execute(
     step: StepSpec,
     emit: (event: KernelEvent) => void,
+    log: EventLog,
   ): Promise<StepState["status"]> {
-    // A repair strategy may be registered for one specific step, or for a
-    // whole agent — so an agent can carry its own repair behaviour across
-    // every step it owns.
+    // A repair strategy may be registered for one specific step, for a whole
+    // agent — so an agent carries its repair behaviour across every step it
+    // owns — or for a capability, so the knowledge of how to recover from a
+    // given capability's failure lives with that capability. Most specific
+    // wins, so a step can always override.
     const repair =
       this.deps.repairs?.[step.id] ??
-      (step.agent ? this.deps.repairs?.[step.agent] : undefined);
+      (step.agent ? this.deps.repairs?.[step.agent] : undefined) ??
+      this.deps.repairs?.[step.capabilityId];
 
-    const outcome = await this.deps.harness.runStep(step, repair);
+    // Resolve `$from` before the harness sees the step. Deliberately outside
+    // the attempt loop: a reference points at an upstream step's sealed output,
+    // which cannot change between this step's attempts. A repair rewrites input
+    // INSIDE the loop and is re-validated there — different concern, already
+    // handled.
+    let resolvedInput: unknown;
+    try {
+      resolvedInput = await resolveInput(step.input, (id) => this.readOutput(id, log));
+    } catch (error) {
+      // A step whose input cannot be assembled is a FAILED step, not a crashed
+      // mission. Letting this throw discarded the whole event log — every step
+      // that had already passed, with its evidence — because `run()` never
+      // returned a MissionResult. Found by this feature's own mutation test.
+      const outcome = this.deps.harness.failBeforeRun(
+        step,
+        "input.unresolvable",
+        error instanceof Error ? error.message : String(error),
+      );
+      emit({
+        type: "step.finished",
+        at: this.now(),
+        stepId: step.id,
+        status: outcome.status,
+        evidence: outcome.evidence,
+      });
+      return outcome.status;
+    }
+
+    if (resolvedInput !== step.input) {
+      emit({
+        type: "step.resolved",
+        at: this.now(),
+        stepId: step.id,
+        resolved: await Promise.all(
+          referencesIn(step.input, `${step.id}.input`).map(async ({ at, ref }) => ({
+            at,
+            from: `${ref.stepId}.${ref.field}`,
+            outputArtifactId: (await this.outputArtifactOf(ref.stepId, log)) ?? "",
+          })),
+        ),
+      });
+    }
+
+    const outcome = await this.deps.harness.runStep(
+      resolvedInput === step.input ? step : { ...step, input: resolvedInput },
+      repair,
+    );
     emit({
       type: "step.finished",
       at: this.now(),

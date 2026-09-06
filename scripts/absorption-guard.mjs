@@ -48,6 +48,24 @@ const changed = base && head
   ? git(["diff", "--name-only", base, head]).split("\n").filter(Boolean)
   : [];
 
+/**
+ * Files this PR ADDED, as opposed to touched. Absorption means a capability
+ * that did not exist now does; editing an existing capability's manifest is
+ * ordinary kernel work and must not be made to report an Absorption Score for
+ * a repo it did not absorb.
+ *
+ * `--name-only` cannot tell the two apart, which is why the file-based
+ * detector fired on PR #65 — a change to `llm.chat`'s manifest adding a
+ * required `trust` field, absorbing nothing.
+ */
+const added = base && head
+  ? git(["diff", "--name-status", "--diff-filter=A", base, head])
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => l.split("\t").pop())
+      .filter(Boolean)
+  : [];
+
 /* ── 1 · nobody weakens the gauntlet ──────────────────────────────────── */
 const ciTouched = changed.filter((f) => f.startsWith(".github/workflows/"));
 if (ciTouched.length > 0) {
@@ -85,7 +103,8 @@ const isAbsorption =
   // working detector. Omit that line and every score check skipped silently.
   /^absorb[:/(]/i.test(title) ||
   /\*\*Fate:\*\*\s*(PORT|BUNDLE|HARVEST)/i.test(body) ||
-  changed.some((f) => f.startsWith(CAP_PREFIX));
+  // ADDED, not changed. See `added` above (#65).
+  added.some((f) => f.startsWith(CAP_PREFIX));
 
 if (!isAbsorption) {
   console.log("Not an absorption PR — checked gauntlet integrity only.");
@@ -94,7 +113,7 @@ if (!isAbsorption) {
 
 /* ── 3 · one repo per PR ──────────────────────────────────────────────── */
 const capDirs = new Set(
-  changed
+  added
     .filter((f) => f.startsWith(CAP_PREFIX))
     // A capability is either a directory (omniroute/chat.ts) or a single file
     // (scrapling-relocate.ts); both are one capability, so drop the extension

@@ -8,6 +8,7 @@
 
 import type { Isolation } from "./sandbox";
 import type { InputConstraints } from "./inputContract";
+import type { OutputConstraints } from "./outputContract";
 export type { Isolation };
 
 /** Content-addressed artifact id: "sha256:<64 hex>". */
@@ -78,6 +79,27 @@ export interface CapabilityManifest {
    * See kernel/inputContract.ts for the three real holes this closed.
    */
   inputConstraints: InputConstraints;
+  /**
+   * Gate 8, fourth leg. The three above say what a capability may do, where,
+   * and what it may be asked to do. This says WHAT IT GIVES BACK — the fields
+   * of `run()`'s resolved value.
+   *
+   * REQUIRED, for the same reason `inputConstraints` is, plus one more that is
+   * specific to outputs: a later step referencing `{"$from": "fetch.title"}`
+   * can only be refused while the plan is being validated if something records
+   * that `web.fetch` returns `artifactId` and `bytes` and no `title`. Without
+   * this the reference validates, the mission runs, and the value arrives as
+   * `undefined` several steps downstream.
+   *
+   * A capability that genuinely returns nothing declares `{}`, meaning "the
+   * output must be empty" — not "anything goes".
+   *
+   * ENFORCED ON THE WAY OUT, not only at registration: the harness checks the
+   * real return value against this before a step can pass. A declaration
+   * nothing checks is a claim about a thing that lives somewhere else, which
+   * is exactly what THE SELF-DESCRIPTION RULE is about.
+   */
+  outputs: OutputConstraints;
   /** Budgets a step gets by default when it invokes this capability. */
   defaultBudget: Budget;
   /** Human-readable, used in evidence. */
@@ -144,8 +166,28 @@ export interface Evidence {
    * fix it would have been the wrong trade.
    */
   producedArtifactIds: ArtifactId[];
+  /**
+   * The step's own output, stored as an artifact, present only when the step
+   * PASSED. This is what makes `$from` resolution survive a resume: the value a
+   * later step references is read back from the store via this id, rather than
+   * from a map of outputs the scheduler holds in memory for the length of one
+   * process. A mission whose data flow lives in process memory is reproducible
+   * only until something restarts.
+   *
+   * Serialising it is safe because of the output contract (#66): a declared
+   * output is built from the descriptive constraint kinds, all of which are
+   * JSON values.
+   */
+  outputArtifactId?: ArtifactId;
   checks: CheckResult[];
-  /** Hash of the step's resolved inputs — drives memoisation. */
+  /**
+   * Hash of the step's resolved inputs — drives memoisation.
+   *
+   * "Resolved" is now literal: a step whose input holds `$from` references is
+   * hashed AFTER they are replaced with real values, so two runs that reference
+   * the same upstream output memoise together and a run whose upstream changed
+   * does not.
+   */
   inputHash: string;
   /**
    * True when the step failed AND the kernel actually restored its declared
@@ -177,7 +219,18 @@ export interface StepSpec {
    * failure in evidence and lets the graph continue — never silently.
    */
   continueOnError?: boolean;
-  /** Which agent owns this step. Used for reporting and concurrency limits. */
+  /**
+   * Which agent owns this step.
+   *
+   * It is used for reporting, and for **repair-strategy lookup**: the scheduler
+   * resolves a repair most-specific-first — step id, then this, then capability
+   * id — so an agent can carry its recovery behaviour across every step it owns.
+   *
+   * It does NOT drive concurrency. That was the previous docstring's claim and
+   * it was wrong in both directions: `maxParallel` is a per-mission number and
+   * the scheduler's locks are keyed on `StepSpec.locks`, neither of which reads
+   * this field. Nothing in the kernel groups work by agent.
+   */
   agent?: string;
 }
 

@@ -62,6 +62,19 @@ Closes #
 
 ---
 
+
+## Defect classes
+
+<!-- THE REGISTRY RULE: every mistake either adds a class or appends an instance,
+     in the same PR that fixes it. A defect that recurs was never classified.
+     `gate: defect-registry` reads this PR's body: if it says a defect was found
+     or a mistake corrected and docs/DEFECT_CLASSES.md is unchanged, it goes red
+     and names the phrase that fired. -->
+
+- [ ] No new defect class surfaced in this PR
+- [ ] New class(es) added to `docs/DEFECT_CLASSES.md`: <names>
+- [ ] Existing class hit again — instance appended to: <name>
+
 ## Gauntlet
 
 - [ ] All live gates green (1, 2, 3, 4, 5, 8, 11 — see `CI_STATUS.md`)

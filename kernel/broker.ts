@@ -10,6 +10,7 @@
 import type { Budget, Capability, CapabilityManifest, Check } from "./types";
 import type { Isolation } from "./sandbox";
 import { assertConstraints, checkInput } from "./inputContract";
+import { assertOutputs, checkOutput } from "./outputContract";
 
 export class BrokerError extends Error {}
 
@@ -82,6 +83,25 @@ function assertInputContract(manifest: CapabilityManifest): void {
   assertConstraints(manifest.inputConstraints, manifest.id);
 }
 
+/**
+ * Gate 8, fourth leg, enforced at registration: a manifest must SAY what it
+ * returns, and the saying must be well-formed.
+ *
+ * Absent is refused rather than defaulted, because the only available default
+ * would be "anything", and a capability whose output is unconstrained cannot
+ * be referenced by a later step with any confidence — the reference would
+ * validate against a promise nobody made.
+ */
+function assertOutputContract(manifest: CapabilityManifest): void {
+  if (manifest.outputs === undefined) {
+    throw new BrokerError(
+      `${manifest.id}: manifest declares no outputs. A capability that returns nothing declares {} — ` +
+        `meaning "the output must be empty". There is no value meaning "anything goes"`,
+    );
+  }
+  assertOutputs(manifest.outputs, manifest.id);
+}
+
 export class Broker {
   private readonly capabilities = new Map<string, Capability>();
   private readonly checks = new Map<string, Check>();
@@ -96,6 +116,7 @@ export class Broker {
     assertValidBudget(manifest.defaultBudget, manifest.id);
     assertBoundedRadius(manifest);
     assertInputContract(manifest);
+    assertOutputContract(manifest);
     this.capabilities.set(manifest.id, capability);
   }
 
@@ -134,6 +155,31 @@ export class Broker {
     const violations = checkInput(this.manifest(capabilityId).inputConstraints, input);
     if (violations.length > 0) {
       throw new BrokerError(`${capabilityId}: input refused — ${violations.join("; ")}`);
+    }
+  }
+
+  /**
+   * The mirror of `validateInput`, run on the way OUT — after `run()` returns
+   * and BEFORE any check sees the value.
+   *
+   * Ordering matters and is not arbitrary. A check asks the mission's
+   * question ("is this title non-empty"); this asks the contract's ("is this
+   * the shape the manifest promised"). Running it first means a capability
+   * that has drifted from its own manifest fails as a contract violation with
+   * the field named, instead of as whatever downstream confusion the wrong
+   * shape happens to produce.
+   *
+   * Refusing here rather than trusting the declaration is what stops `outputs`
+   * from being decoration. `$from` resolution in the next PR reads a field
+   * this promised exists; if nothing ever compared promise to value, the
+   * reference would resolve to `undefined` and the mission would carry on.
+   */
+  validateOutput(capabilityId: string, output: unknown): void {
+    const violations = checkOutput(this.manifest(capabilityId).outputs, output);
+    if (violations.length > 0) {
+      throw new BrokerError(
+        `${capabilityId}: output does not match its declared outputs — ${violations.join("; ")}`,
+      );
     }
   }
 

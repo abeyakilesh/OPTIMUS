@@ -22,7 +22,7 @@ caching, asynchronism, security).
 | **FR-1** | Every capability is described by a **manifest entry**: inputs, outputs, error modes, required permissions, cost class, isolation level, and budget defaults. A capability without a complete manifest cannot be registered. | Contract test rejects an incomplete manifest | 2 |
 | **FR-2** | The broker resolves a capability **by name and version only**. No caller may reach an engine directly. | Static rule: no import of an engine outside its adapter | 3 |
 | **FR-3** | A step declares the permissions it needs. It receives **exactly those and nothing else** — no ambient credentials, no shared token, no inherited network. | Isolation test: step requesting `net:read` cannot write the filesystem | 10 |
-| **FR-4** | Every step output is written to the artifact store **content-addressed by sha256**. An artifact is immutable; a changed output is a new artifact. | Hash test: re-writing identical bytes yields the same id; changed bytes yield a different one | 2 |
+| **FR-4** | Every step output is written to the artifact store **content-addressed by sha256**, and **every read re-derives the address before returning bytes**. An artifact is immutable; a changed output is a new artifact; content that no longer matches its address is not returned at all. | Hash test: re-writing identical bytes yields the same id; changed bytes yield a different one. **Tamper test: bytes altered underneath the store make `get()` throw** (`tests/kernel/artifact-integrity.test.ts`) | 2, #60 |
 | **FR-5** | The scheduler executes the mission graph: parallel where independent, ordered where dependent, and **resumable after a crash** without re-running completed steps. | Kill the process mid-mission, restart, assert completed steps are not re-executed | 14 |
 | **FR-6** | **A step is done only when its check passes.** Model output is never a completion signal. | Fault injection: corrupt a step's output, assert the step is marked failed | 2 + 11 |
 | **FR-7** | A mission's effects are **not applied to the real world** until every required check is green. | Test: a mission with one red check leaves the target state untouched | 11 |
@@ -75,7 +75,7 @@ caching, asynchronism, security).
 | # | Requirement | Choice | Verified by |
 |---|---|---|---|
 | **NFR-10** | Mission state is **strongly consistent**; you must never see a step as green that later turns red. | single writer, append-only event log | Concurrency test |
-| **NFR-11** | Artifacts are immutable ⇒ **eventual consistency is safe** for artifact reads/CDN. | content-addressed | Hash test |
+| **NFR-11** | Artifacts are immutable ⇒ **eventual consistency is safe** for artifact reads/CDN. | content-addressed, **checked on read** — immutability that is never re-checked is an assumption, and it is the assumption a cache is built on | Hash + tamper test |
 | **NFR-12** | A crash mid-mission loses **no completed step**. | fold-from-events + checkpoints | Kill-restart test (FR-5) |
 | **NFR-13** | The app is **fully usable offline** except model calls and page fetches. | Run the suite with network disabled | CI job with egress blocked |
 

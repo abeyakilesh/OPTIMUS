@@ -20,6 +20,25 @@ export type KernelEvent =
       status: StepStatus;
       evidence: Evidence;
     }
+  /**
+   * A step's `$from` references, and what each resolved to. Emitted before the
+   * step starts, only when it had any.
+   *
+   * It folds to nothing, like `step.attempt`, and is kept for the same reason:
+   * the mission spec in the log carries the UNRESOLVED input and evidence
+   * carries only a hash of the resolved one, so without this event "what did
+   * this reference actually point at" is unanswerable from the log — for the
+   * one feature whose entire subject is where a value came from.
+   *
+   * `from` is the reference as written; `outputArtifactId` is the producing
+   * step's sealed output, which is the durable thing a reader can go and open.
+   */
+  | {
+      type: "step.resolved";
+      at: number;
+      stepId: string;
+      resolved: Array<{ at: string; from: string; outputArtifactId: string }>;
+    }
   | { type: "step.blocked"; at: number; stepId: string; because: string }
   /**
    * A step whose dependency failed but which is declared continue-on-error.
@@ -84,6 +103,10 @@ export function fold(events: readonly KernelEvent[]): MissionState | undefined {
       case "step.attempt":
         // Attempt counts live in evidence; nothing to fold here. The event is
         // kept because a trace without attempts hides retry behaviour.
+        break;
+      case "step.resolved":
+        // Same: a trace with no record of what a reference pointed at hides the
+        // data flow. State is unchanged — the step has not run yet.
         break;
       case "step.finished": {
         const step = state?.steps[event.stepId];

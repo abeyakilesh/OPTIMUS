@@ -16,12 +16,28 @@
  */
 
 import type { Capability, Check, CheckResult } from "../../types";
+import { TRUST_LEVELS, renderForModel, type Trust } from "../../provenance";
+import { ARTIFACT_ID_OUTPUT } from "../../outputContract";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:20128";
 
 export interface LlmChatMessage {
+  /**
+   * The OpenAI transport field. NOT a trust statement — it says how the model
+   * should read the turn, never who authored the bytes. That confusion is the
+   * hole `trust` closes (#64).
+   */
   role: "system" | "user" | "assistant";
   content: string;
+  /**
+   * Where this content came from. REQUIRED, and required is the whole point:
+   * the input contract's field set is closed, so a caller that omits it is
+   * refused at the manifest door rather than silently defaulting to trusted.
+   * See kernel/provenance.ts.
+   */
+  trust: Trust;
+  /** Optional human-readable origin for evidence — a URL, a capability id. */
+  source?: string;
 }
 
 export interface LlmChatInput {
@@ -75,6 +91,15 @@ function extractErrorMessage(parsed: Record<string, unknown>, status: number): s
  * netFetch makes the HTTP call directly in this process; there is no
  * unsandboxed child process in between.
  */
+/**
+ * Kernel message -> OpenAI wire message. Two jobs, and both must happen at the
+ * same point: apply the untrusted rendering, and drop `trust`/`source`, which
+ * are kernel bookkeeping the API would reject as unknown fields.
+ */
+function forWire(m: LlmChatMessage): { role: string; content: string } {
+  return { role: m.role, content: renderForModel(m.content, { trust: m.trust, source: m.source }) };
+}
+
 export const llmChat: Capability = {
   manifest: {
     id: "llm.chat",
@@ -113,10 +138,41 @@ export const llmChat: Capability = {
           fields: {
             role: { kind: "string", required: true, enum: ["system", "user", "assistant"] },
             content: { kind: "string", required: true, maxLength: 500_000 },
+            // #64. REQUIRED, not optional, and the closed field set does the
+            // rest: a caller that omits it is refused on every attempt, and a
+            // caller that invents a level is refused too. There is no path
+            // where untagged content reaches the model by default — which is
+            // the only property of this design worth relying on.
+            trust: { kind: "string", required: true, enum: [...TRUST_LEVELS] },
+            source: { kind: "string", maxLength: 2_000 },
           },
         },
       },
       timeoutMs: { kind: "number", integer: true, min: 1, max: 600_000 },
+    },
+    // Read off the three return paths in `run()` below — the timeout path, the
+    // !ok path, and the success path — not off `LlmChatOutput`'s declaration.
+    // They agree here, and checking rather than assuming is the point.
+    //
+    // Only `ok`, `status` and `artifactId` are required, because that is what
+    // is true on EVERY path: a timeout returns status 0 with no model, no
+    // content and no usage. Marking `content` required would fail the very
+    // path that exists to report a failure honestly.
+    outputs: {
+      ok: { kind: "boolean", required: true },
+      status: { kind: "number", required: true, integer: true, min: 0 },
+      model: { kind: "string" },
+      content: { kind: "string" },
+      usage: {
+        kind: "object",
+        fields: {
+          promptTokens: { kind: "number", integer: true, min: 0 },
+          completionTokens: { kind: "number", integer: true, min: 0 },
+          totalTokens: { kind: "number", integer: true, min: 0 },
+        },
+      },
+      error: { kind: "string" },
+      artifactId: ARTIFACT_ID_OUTPUT,
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: DEFAULT_TIMEOUT_MS, maxCost: 20 },
     description:
@@ -143,7 +199,11 @@ export const llmChat: Capability = {
         "Content-Type": "application/json",
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
-      body: JSON.stringify({ model, messages, stream: false }),
+      // The tag protects the kernel; this protects the model, which only ever
+      // sees a string. Untrusted content is fenced and labelled HERE, at the
+      // last point before it leaves — so no caller can forget to do it and no
+      // path around it exists.
+      body: JSON.stringify({ model, messages: messages.map(forWire), stream: false }),
       timeoutMs,
     });
 

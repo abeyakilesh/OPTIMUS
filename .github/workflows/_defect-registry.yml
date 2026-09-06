@@ -1,0 +1,32 @@
+# Reusable · GATE — the defect-class registry stays true and stays current.
+#
+# Two jobs in one: the registry must be internally consistent (every class
+# complete, every named mechanism still present, the coverage line derived
+# rather than typed), AND a PR that admits a defect must move it. The second
+# half is the one that matters — without it the registry becomes another
+# document that was true the week it was written.
+name: "gate:defect-registry"
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  registry:
+    name: defect registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Registry consistent, and updated if this PR found something
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/defect-registry.mjs

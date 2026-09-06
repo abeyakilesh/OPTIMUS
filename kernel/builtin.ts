@@ -6,6 +6,7 @@
  */
 
 import type { Capability, Check, CheckResult } from "./types";
+import { ARTIFACT_ID_OUTPUT } from "./outputContract";
 
 const ONE_SECOND = 1000;
 
@@ -27,6 +28,13 @@ export const webFetch: Capability = {
       // Same host list as isolation.allowedHosts above, checked one layer
       // earlier: this refuses the value, that refuses the socket.
       url: { kind: "url", required: true, allowedSchemes: ["http", "https"], allowedHosts: ["example.com"] },
+    },
+    // Read off `run()` below, not off the description: it returns the address
+    // of the stored body and the body's length, and nothing else. A later
+    // step's {"$from": "fetch.title"} is refused against exactly this.
+    outputs: {
+      artifactId: ARTIFACT_ID_OUTPUT,
+      bytes: { kind: "number", required: true, integer: true, min: 0 },
     },
     defaultBudget: { maxAttempts: 3, maxWallTimeMs: 30 * ONE_SECOND, maxCost: 10 },
     description: "Fetch a URL and store the response body as an artifact.",
@@ -55,6 +63,15 @@ export const htmlExtractTitle: Capability = {
       // A content address, and shaped like one: `sha256:` + 64 hex is 71
       // characters exactly, so the bounds are the real format, not a guess.
       artifactId: { kind: "string", required: true, minLength: 71, maxLength: 71 },
+    },
+    // `title` carries no minLength on purpose. The capability legitimately
+    // returns "" for `<title></title>`; whether an empty title is ACCEPTABLE
+    // is the mission's question, and `title.nonEmpty` is the check that asks
+    // it. A contract that refused it here would make the check unreachable and
+    // report the wrong reason for the same failure.
+    outputs: {
+      title: { kind: "string", required: true },
+      artifactId: ARTIFACT_ID_OUTPUT,
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 5 * ONE_SECOND, maxCost: 5 },
     description: "Extract the <title> text from a stored HTML artifact.",
@@ -97,14 +114,31 @@ export const titleNonEmpty: Check = {
   },
 };
 
-/** Proves the artifact the step claims to have written actually exists. */
-export const artifactExists: Check = {
-  id: "artifact.exists",
+/**
+ * Proves the step's artifact is readable AND that its bytes still hash to the
+ * id the step reported.
+ *
+ * RENAMED from `artifact.exists` in #60, because the check now proves strictly
+ * more than its old name said. Existence was all it could ever assert while
+ * `ArtifactStore.get()` returned bytes unverified; with the store enforcing
+ * the invariant on read, a pass here means the content is intact, and evidence
+ * reading "artifact.exists ✔" would understate what was established. A name
+ * that understates is still a name that has to be checked against behaviour
+ * (THE SELF-DESCRIPTION RULE) — the direction of the error is luck, not
+ * design.
+ *
+ * The verification lives in the store, not here. This check must not re-hash
+ * independently: a check that re-implements the guarantee it is checking will
+ * pass whenever its own copy of the logic agrees with itself, which is how a
+ * check stops testing its subject (THE MUTATION RULE).
+ */
+export const artifactIntact: Check = {
+  id: "artifact.intact",
   async run(output, ctx): Promise<CheckResult> {
     const id = (output as { artifactId?: unknown })?.artifactId;
     if (typeof id !== "string") {
       return {
-        checkId: "artifact.exists",
+        checkId: "artifact.intact",
         passed: false,
         reason: `step returned no artifactId (got ${JSON.stringify(id)})`,
       };
@@ -112,14 +146,14 @@ export const artifactExists: Check = {
     try {
       const bytes = await ctx.readArtifact(id);
       return {
-        checkId: "artifact.exists",
+        checkId: "artifact.intact",
         passed: true,
-        reason: `artifact ${id} readable, ${bytes.length} bytes`,
+        reason: `artifact ${id} readable and intact, ${bytes.length} bytes`,
         detail: { artifactId: id, bytes: bytes.length },
       };
     } catch (error) {
       return {
-        checkId: "artifact.exists",
+        checkId: "artifact.intact",
         passed: false,
         reason: `artifact ${id} is not readable: ${
           error instanceof Error ? error.message : String(error)

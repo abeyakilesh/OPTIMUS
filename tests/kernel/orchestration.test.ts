@@ -74,6 +74,7 @@ function tracked(id: string, timeline: Timeline, ticks = 3): Capability {
       version: "1.0.0",
       permissions: [],
       inputConstraints: { stepId: { kind: "string", required: true, maxLength: 200 } },
+      outputs: { stepId: { kind: "string", required: true } },
       defaultBudget: { maxAttempts: 1, maxWallTimeMs: 10_000, maxCost: 10 },
       description: `tracked capability ${id}`,
     },
@@ -295,6 +296,10 @@ describe("multi-agent orchestration", () => {
         inputConstraints: {
           stepId: { kind: "string", required: true, maxLength: 200 },
           fixes: { kind: "number", integer: true, min: 0, max: 100 },
+        },
+        outputs: {
+          stepId: { kind: "string", required: true },
+          title: { kind: "string", required: true },
         },
         defaultBudget: { maxAttempts: 5, maxWallTimeMs: 10_000, maxCost: 50 },
         description: "succeeds only after repair",

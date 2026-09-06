@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { ALL_CAPABILITIES, ALL_CHECKS, buildBroker } from "../../kernel/registry";
-import type { Capability } from "../../kernel/types";
+import type { Capability, CapabilityManifest } from "../../kernel/types";
 
 /**
  * One registry, every consumer reads it, and these tests assert they agree.
@@ -16,9 +16,60 @@ import type { Capability } from "../../kernel/types";
 const ROOT = join(process.cwd());
 const CAPABILITY_DIR = join(ROOT, "kernel", "capabilities");
 
+/**
+ * The keys of `T` that are NOT optional. `Pick<T, K>` for an optional key is
+ * `{ K?: … }`, which `object` is assignable to; for a required key it is not.
+ */
+type RequiredKeys<T> = { [K in keyof T]-?: object extends Pick<T, K> ? never : K }[keyof T];
+
+/**
+ * One presence test per REQUIRED field of `CapabilityManifest` — and the type
+ * annotation is the mechanism, not the decoration.
+ *
+ * `looksLikeCapability` below asserts `value is Capability`, which promises
+ * every field of that interface. It used to check `manifest?.id` and nothing
+ * else: six manifest fields asserted, one examined. That is
+ * `predicate-asserts-more-than-it-checks`, and `tsc` cannot catch it, because
+ * a type predicate's BODY is never verified against the type it asserts —
+ * only that the asserted type is assignable to the parameter's.
+ *
+ * `Record<RequiredKeys<CapabilityManifest>, …>` closes that specific gap by
+ * hand: adding a required field to the manifest interface makes this object
+ * literal fail to compile until the field is listed. #66 is the proof it
+ * works — `outputs` was added to the interface, and this line is why it could
+ * not be added to the interface alone.
+ *
+ * What it does NOT do, stated so the row in DEFECT_CLASSES.md stays honest:
+ * it forces a check to EXIST per required field. It cannot force that check to
+ * be a good one. `() => true` would compile.
+ */
+const MANIFEST_FIELD_PRESENT: Record<
+  RequiredKeys<CapabilityManifest>,
+  (m: CapabilityManifest) => boolean
+> = {
+  id: (m) => typeof m.id === "string" && m.id.length > 0,
+  version: (m) => typeof m.version === "string" && m.version.length > 0,
+  permissions: (m) => Array.isArray(m.permissions),
+  inputConstraints: (m) => isRecord(m.inputConstraints),
+  outputs: (m) => isRecord(m.outputs),
+  defaultBudget: (m) => isRecord(m.defaultBudget),
+  description: (m) => typeof m.description === "string",
+};
+
+const REQUIRED_MANIFEST_FIELDS = Object.keys(MANIFEST_FIELD_PRESENT) as Array<
+  RequiredKeys<CapabilityManifest>
+>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function looksLikeCapability(value: unknown): value is Capability {
-  const c = value as Capability | undefined;
-  return Boolean(c && typeof c === "object" && c.manifest?.id && typeof c.run === "function");
+  if (!isRecord(value)) return false;
+  if (typeof value.run !== "function") return false;
+  if (!isRecord(value.manifest)) return false;
+  const manifest = value.manifest as unknown as CapabilityManifest;
+  return REQUIRED_MANIFEST_FIELDS.every((field) => MANIFEST_FIELD_PRESENT[field](manifest));
 }
 
 async function capabilityFiles(dir: string): Promise<string[]> {
@@ -89,6 +140,36 @@ describe("the registry is the single source", () => {
   });
 });
 
+/**
+ * THE MUTATION RULE, applied to the predicate itself: remove its subject and
+ * watch it go red. The subject here is "every required field of the manifest",
+ * so the mutation is done once PER FIELD, driven off the same list the
+ * predicate uses — a hand-written list here could go stale against the
+ * predicate and the test would keep passing while checking less.
+ */
+describe("looksLikeCapability checks every field it asserts", () => {
+  const real = ALL_CAPABILITIES[0];
+
+  it("accepts a genuine capability", () => {
+    expect(looksLikeCapability(real)).toBe(true);
+  });
+
+  it.each(REQUIRED_MANIFEST_FIELDS)("rejects a manifest missing %s", (field) => {
+    const manifest = { ...real.manifest } as Record<string, unknown>;
+    delete manifest[field];
+    expect(looksLikeCapability({ manifest, run: real.run })).toBe(false);
+  });
+
+  it("rejects the shapes that are not capabilities at all", () => {
+    // The registry sweep imports whole modules and looks at every export, so
+    // these are the values it actually meets: constants, types-at-runtime,
+    // helper functions, checks.
+    for (const notACapability of [undefined, null, "web.fetch", 42, [], {}, () => {}, { manifest: {} }]) {
+      expect(looksLikeCapability(notACapability), JSON.stringify(notACapability ?? null)).toBe(false);
+    }
+  });
+});
+
 describe("overrides replace, and a typo is refused", () => {
   const fake: Capability = {
     manifest: { ...ALL_CAPABILITIES[1].manifest },
@@ -135,7 +216,14 @@ describe("no consumer builds its own broker", () => {
     for (const dir of ["app", "kernel", "lib", "components"]) {
       for (const file of await capabilityFiles(join(ROOT, dir)).catch(() => [])) {
         if (file.endsWith("registry.ts") || file.endsWith("broker.ts")) continue;
-        const source = await readFile(file, "utf8");
+        // Mutation tests compile a modified copy of a kernel module as a
+        // SIBLING of the original, because its relative imports have to keep
+        // resolving. Those copies exist for milliseconds and vitest runs test
+        // files in parallel, so this scan can meet one — and can equally meet
+        // its absence between the readdir and the read. Neither is an
+        // offender, and a flake here would read as a real violation.
+        if (/\.mutant-/.test(file)) continue;
+        const source = await readFile(file, "utf8").catch(() => "");
         if (/new Broker\s*\(/.test(source)) offenders.push(relative(ROOT, file));
       }
     }

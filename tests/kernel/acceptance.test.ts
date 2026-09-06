@@ -24,7 +24,7 @@ import {
 } from "../../kernel/artifacts";
 import { fold } from "../../kernel/events";
 import { snapshot, rollback } from "../../kernel/rollback";
-import { webFetch, htmlExtractTitle, titleNonEmpty, artifactExists } from "../../kernel/builtin";
+import { webFetch, htmlExtractTitle, titleNonEmpty, artifactIntact } from "../../kernel/builtin";
 import type { Capability, MissionSpec } from "../../kernel/types";
 
 /** A fixed page so every run is deterministic — no real network, ever. */
@@ -39,7 +39,7 @@ function buildKernel(store = new MemoryArtifactStore()) {
   broker.register(webFetch);
   broker.register(htmlExtractTitle);
   broker.registerCheck(titleNonEmpty);
-  broker.registerCheck(artifactExists);
+  broker.registerCheck(artifactIntact);
 
   const fetcher = async (url: string) => {
     if (url !== "https://example.com") throw new Error(`unexpected url ${url}`);
@@ -61,14 +61,18 @@ function skeletonMission(): MissionSpec {
         capabilityId: "web.fetch",
         input: { url: "https://example.com" },
         dependsOn: [],
-        checks: ["artifact.exists"],
+        checks: ["artifact.intact"],
       },
       {
         id: "extract",
         capabilityId: "html.extractTitle",
-        input: { artifactId: addressOf(FIXTURE_HTML) },
+        // The other half of facade #2 (#68). AC-1 passed for the same wrong
+        // reason as the CLI demo: this was `addressOf(FIXTURE_HTML)`, a
+        // constant that happened to equal what `fetch` would produce, so the
+        // dependency edge carried nothing. See "the edge is not decorative".
+        input: { artifactId: { $from: "fetch.artifactId" } },
         dependsOn: ["fetch"],
-        checks: ["title.nonEmpty", "artifact.exists"],
+        checks: ["title.nonEmpty", "artifact.intact"],
       },
     ],
   };
@@ -83,13 +87,22 @@ describe("WP-001 acceptance criteria", () => {
 
       // Same capability, but it corrupts the title on the way out — exactly
       // the "looks like it worked" failure a model would happily report.
+      //
+      // The corruption is WELL-FORMED on purpose, and this is the second time
+      // that has had to be said here. It used to return
+      // `{ title: "", artifactId: undefined }`, which stopped reaching the
+      // check the moment the output contract landed (#66) — the same drift the
+      // input-constraint note below records, one door further along. The two
+      // assertions at the bottom are what caught it both times: they name
+      // WHICH check blocked, so a step that starts failing somewhere else goes
+      // red instead of quietly passing for a new reason.
       const sabotaged: Capability = {
         manifest: {
           ...htmlExtractTitle.manifest,
           id: "html.extractTitle.sabotaged",
         },
-        async run() {
-          return { title: "", artifactId: undefined };
+        async run(_input, ctx) {
+          return { title: "", artifactId: await ctx.putArtifact("") };
         },
       };
       broker.register(sabotaged);
@@ -112,7 +125,7 @@ describe("WP-001 acceptance criteria", () => {
             // worse than one that breaks.
             input: { artifactId: addressOf(FIXTURE_HTML) },
             dependsOn: [],
-            checks: ["title.nonEmpty", "artifact.exists"],
+            checks: ["title.nonEmpty", "artifact.intact"],
           },
         ],
       });
@@ -132,6 +145,11 @@ describe("WP-001 acceptance criteria", () => {
       // assertions above were all still true.
       const failed = checks.filter((c) => !c.passed).map((c) => c.checkId);
       expect(failed, "the declared checks must be what blocked this").toContain("title.nonEmpty");
+      // `capability.completed` is the harness's stand-in for "the capability
+      // never returned cleanly" — a permission denial, a throw, a refused
+      // input, and now a refused OUTPUT all surface under it. Seeing it here
+      // means something stopped the step before verification ran, which is a
+      // different guarantee than the one this test is about.
       expect(failed).not.toContain("capability.completed");
     });
 
@@ -171,6 +189,23 @@ describe("WP-001 acceptance criteria", () => {
     const titleArtifact = result.state.steps.extract.evidence?.artifactIds.at(-1);
     expect(titleArtifact).toBe(addressOf(EXPECTED_TITLE));
     expect(await store.get(titleArtifact!)).toBe(EXPECTED_TITLE);
+
+    // The edge carried the value. Until #68 this criterion was satisfiable by
+    // two independent steps that happened to agree, because `extract`'s input
+    // was a constant computed in this file — so AC-1 could not tell a pipeline
+    // from a coincidence.
+    //
+    // This asserts the mechanism is present. The assertion that the edge is
+    // LOAD-BEARING lives in tests/kernel/references.test.ts, where a different
+    // upstream page is required to produce a different downstream title —
+    // deliberately there and not duplicated here, because two copies of one
+    // proof diverge (`stale-duplicate`).
+    expect(
+      result.log.all().filter((e) => e.type === "step.resolved"),
+      "extract's input must be resolved from fetch, not hardcoded",
+    ).toMatchObject([
+      { stepId: "extract", resolved: [{ from: "fetch.artifactId" }] },
+    ]);
   });
 
   /* ── AC-2 · the permission boundary refuses undeclared access ─────────── */
@@ -193,6 +228,7 @@ describe("WP-001 acceptance criteria", () => {
         permissions: ["net:read"], // note: NO fs:write
         isolation: { allowedHosts: ["example.test"] },
         inputConstraints: {},
+        outputs: { ok: { kind: "boolean", required: true } },
         defaultBudget: { maxAttempts: 1, maxWallTimeMs: 5000, maxCost: 5 },
         description: "Fetches, then tries to write a file it never declared.",
       },
@@ -209,7 +245,7 @@ describe("WP-001 acceptance criteria", () => {
       capabilityId: "web.fetch.overreaching",
       input: {},
       dependsOn: [],
-      checks: ["artifact.exists"],
+      checks: ["artifact.intact"],
     });
 
     expect(outcome.status).not.toBe("passed");
@@ -239,6 +275,7 @@ describe("WP-001 acceptance criteria", () => {
           // found it honestly: before `nudge` was declared, the step stopped
           // after 1 invocation instead of 3.
           inputConstraints: { nudge: { kind: "number", min: 0, max: 1 } },
+          outputs: { title: { kind: "string", required: true } },
           defaultBudget: { maxAttempts: 3, maxWallTimeMs: 10_000, maxCost: 100 },
           description: "Returns an empty title forever.",
         },
@@ -283,6 +320,7 @@ describe("WP-001 acceptance criteria", () => {
           version: "1.0.0",
           permissions: [],
           inputConstraints: {},
+          outputs: { title: { kind: "string", required: true } },
           defaultBudget: { maxAttempts: 100, maxWallTimeMs: 1000, maxCost: 1000 },
           description: "Never satisfies its check.",
         },
@@ -322,6 +360,7 @@ describe("WP-001 acceptance criteria", () => {
           permissions: [],
           // Each attempt costs 1; allow 2 before the ceiling bites.
           inputConstraints: {},
+          outputs: { title: { kind: "string", required: true } },
           defaultBudget: { maxAttempts: 50, maxWallTimeMs: 60_000, maxCost: 2 },
           description: "Never satisfies its check.",
         },
@@ -357,6 +396,7 @@ describe("WP-001 acceptance criteria", () => {
             version: "1.0.0",
             permissions: [],
             inputConstraints: {},
+            outputs: {},
             defaultBudget: { maxAttempts: 0, maxWallTimeMs: 1000, maxCost: 1 },
             description: "zero attempts is not a budget",
           },

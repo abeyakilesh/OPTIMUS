@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 /**
  * `absorption-guard.mjs` enforces CLAUDE.md's scoring rules on every PR, and
@@ -25,10 +27,12 @@ function runGuard(
   body: string,
   title = "absorb/example: SERVICE",
   shas: { base?: string; head?: string } = {},
+  cwd?: string,
 ): { code: number; out: string } {
   try {
-    const out = execFileSync("node", [GUARD], {
+    const out = execFileSync("node", [resolve(GUARD)], {
       encoding: "utf8",
+      cwd,
       env: {
         ...process.env,
         PR_BODY: body,
@@ -193,6 +197,75 @@ describe("the file-based checks run against a REAL diff", () => {
     expect(r.out).not.toMatch(/ReferenceError/);
     expect(r.code).toBe(1);
     expect(r.out).toMatch(/No Absorption Score found/);
+  });
+
+  /**
+   * #65. The guard demanded an Absorption Score from a PR that added a
+   * required `trust` field to llm.chat's manifest — absorbing nothing. It
+   * keyed on any change under kernel/capabilities/, and `git diff --name-only`
+   * cannot tell an edit from an addition.
+   *
+   * Built on a THROWAWAY repo rather than this one's history. The first draft
+   * located the commits with `git log --diff-filter=A`, passed locally, and
+   * failed in CI — `actions/checkout@v5` clones at depth 1, so `git log` sees
+   * exactly one commit. That is `shallow-clone-assumption`, and this very file
+   * already carried a comment warning about it. Accommodating the shallow
+   * clone (fetch-depth: 0) would couple a workflow to a test; removing the
+   * dependency is the actual fix, and it makes the scenario exact instead of
+   * whatever history happens to contain.
+   */
+  describe("absorption means a capability was ADDED, not touched", () => {
+    const CAP = "kernel/capabilities/example-thing.ts";
+
+    /** A tiny repo with one ADD of a capability and one later EDIT of it. */
+    function scenario(): { dir: string; parent: string; added: string; edited: string } {
+      const dir = mkdtempSync(join(tmpdir(), "optimus-guard-"));
+      const g = (...args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8" }).trim();
+      g("init", "-q", "-b", "main");
+      g("config", "user.email", "t@example.com");
+      g("config", "user.name", "t");
+      writeFileSync(join(dir, "README.md"), "seed\n");
+      g("add", "-A");
+      g("commit", "-qm", "seed");
+      const parent = g("rev-parse", "HEAD");
+
+      mkdirSync(join(dir, "kernel", "capabilities"), { recursive: true });
+      writeFileSync(join(dir, CAP), "export const a = 1;\n");
+      g("add", "-A");
+      g("commit", "-qm", "add a capability");
+      const added = g("rev-parse", "HEAD");
+
+      writeFileSync(join(dir, CAP), "export const a = 2;\n");
+      g("add", "-A");
+      g("commit", "-qm", "edit that capability");
+      const edited = g("rev-parse", "HEAD");
+      return { dir, parent, added, edited };
+    }
+
+    it("does NOT demand a score when a capability was only EDITED", () => {
+      const { dir, added, edited } = scenario();
+      try {
+        const r = runGuard("An ordinary kernel change.", "kernel: adjust a manifest",
+          { base: added, head: edited }, dir);
+        expect(r.out).toMatch(/Not an absorption PR/);
+        expect(r.out).not.toMatch(/No Absorption Score found/);
+        expect(r.code).toBe(0);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("STILL demands one when a capability was ADDED — narrowing must not disable", () => {
+      const { dir, parent, added } = scenario();
+      try {
+        const r = runGuard("No score in this body.", "kernel: something",
+          { base: parent, head: added }, dir);
+        expect(r.out).toMatch(/No Absorption Score found/);
+        expect(r.code).toBe(1);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 
   it("rejects a malformed SHA instead of handing it to git", () => {

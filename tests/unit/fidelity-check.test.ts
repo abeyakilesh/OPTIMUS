@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, copyFileSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, copyFileSync, unlinkSync, mkdtempSync, cpSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 /**
  * Gate 11's harness (#34). Mostly failure cases, for the same reason as the
@@ -10,11 +12,35 @@ import { createHash } from "node:crypto";
  */
 
 const HARNESS = "scripts/fidelity-check.mjs";
-const MANIFEST = "kernel/fixtures/goldens.json";
+const REAL_MANIFEST = "kernel/fixtures/goldens.json";
+
+/**
+ * A private copy of the fixture set, per test file.
+ *
+ * These tests mutate goldens to prove the gate can fail. Vitest runs test FILES
+ * in parallel, so mutating the real fixture raced
+ * tests/kernel/sequence-matcher.test.ts — which reads the same golden and
+ * briefly saw `expected: 0.999`, failing a port that was perfectly correct.
+ * A mutation test that writes shared state is a flake generator for every suite
+ * that reads it, and the failure lands on the innocent file.
+ */
+const SANDBOX = mkdtempSync(join(tmpdir(), "optimus-fidelity-"));
+cpSync("kernel/fixtures", join(SANDBOX, "fixtures"), { recursive: true });
+
+const MANIFEST = join(SANDBOX, "goldens.json");
+{
+  const m = JSON.parse(readFileSync(REAL_MANIFEST, "utf8"));
+  for (const g of m.goldens) {
+    g.file = join(SANDBOX, "fixtures", g.file.replace(/^kernel\/fixtures\//, ""));
+    g.generator = join(SANDBOX, "fixtures", g.generator.replace(/^kernel\/fixtures\//, ""));
+  }
+  writeFileSync(MANIFEST, JSON.stringify(m, null, 2) + "\n");
+}
 
 function run(): { code: number; out: string } {
+  const env = { ...process.env, FIDELITY_MANIFEST: MANIFEST };
   try {
-    return { code: 0, out: execFileSync("node", [HARNESS], { encoding: "utf8" }) };
+    return { code: 0, out: execFileSync("node", [resolve(HARNESS)], { encoding: "utf8", env }) };
   } catch (e) {
     const err = e as { status?: number; stdout?: string; stderr?: string };
     return { code: err.status ?? 1, out: `${err.stdout ?? ""}${err.stderr ?? ""}` };
@@ -64,7 +90,7 @@ describe("gate 11 passes on the committed tree", () => {
 
 describe("gate 11 can actually fail", () => {
   it("catches a golden edited to make a failing test pass", () => {
-    withMutated("kernel/fixtures/sequence-matcher-golden.json", (t) => {
+    withMutated(join(SANDBOX, "fixtures", "sequence-matcher-golden.json"), (t) => {
       const cases = JSON.parse(t);
       cases[0].expected = 0.999;
       return JSON.stringify(cases, null, 2);
@@ -80,7 +106,7 @@ describe("gate 11 can actually fail", () => {
   it("catches a generator changed without its golden being regenerated", () => {
     // The likeliest drift: someone edits the case list, reruns nothing, and
     // the stale golden keeps passing every existing assertion.
-    withMutated("kernel/fixtures/generate_golden.py", (t) => t + "\n# added a case, regenerated nothing\n", () => {
+    withMutated(join(SANDBOX, "fixtures", "generate_golden.py"), (t) => t + "\n# added a case, regenerated nothing\n", () => {
       const r = run();
       expect(r.code).toBe(1);
       expect(r.out).toMatch(/GENERATOR changed but the golden was not regenerated/);
@@ -90,7 +116,7 @@ describe("gate 11 can actually fail", () => {
   it("catches a manifest hash quietly relaxed to match a tampered golden", () => {
     // Defeats the obvious workaround for the first test: edit the golden AND
     // its recorded hash. The re-run of the real parent still refuses.
-    withMutated("kernel/fixtures/sequence-matcher-golden.json", (t) => {
+    withMutated(join(SANDBOX, "fixtures", "sequence-matcher-golden.json"), (t) => {
       const cases = JSON.parse(t);
       cases[0].expected = 0.5;
       const next = JSON.stringify(cases, null, 2);
