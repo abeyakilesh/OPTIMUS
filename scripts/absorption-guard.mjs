@@ -18,8 +18,68 @@
 
 import { execFileSync } from "node:child_process";
 
-const body = process.env.PR_BODY ?? "";
+const rawBody = process.env.PR_BODY ?? "";
 const title = process.env.PR_TITLE ?? "";
+
+/**
+ * The body with HTML comments removed.
+ *
+ * WHY: `.github/PULL_REQUEST_TEMPLATE.md` ships its own instructions inside
+ * `<!-- -->`, and one of those lines is
+ *
+ *     **Repo:** · **Fate:** PORT / BUNDLE / HARVEST · **Pinned SHA:**
+ *
+ * which is exactly what the absorption detector below matches on. So a PR
+ * whose body still carries the UNFILLED template was classified as an
+ * absorption and asked for a score breakdown it could not have — the
+ * placeholder was read as a claim. Caught on PR #78, a kernel-only change
+ * whose body GitHub had auto-filled from the commit message plus the template.
+ *
+ * The direction of the bug is what makes it worth a fix rather than a note:
+ * it demanded MORE than it should, so it failed loudly instead of passing
+ * silently. The same read is one edit away from the opposite — a real Fate
+ * line commented out and a real absorption sailing through unscored.
+ *
+ * A comment is not a claim. Everything below reads this, never `rawBody`.
+ *
+ * WHY THIS IS A SCANNER AND NOT `.replace(/<!--[\s\S]*?-->/g, "")`. That was
+ * the first version and CodeQL failed it HIGH —
+ * `js/incomplete-multi-character-sanitization`: a single pass that removes a
+ * multi-character delimiter can leave the opener behind. The rule is written
+ * for HTML sanitisation and this is not rendering HTML, so it was tempting to
+ * call it a false positive and move on. That reasoning — correct observation,
+ * convenient conclusion — is the one this repo has a rule about.
+ *
+ * The rewrite is not defensive paperwork either. It pins the SEMANTICS, which
+ * the regex only got right by accident:
+ *
+ *   · Comments DO NOT NEST. `<!-- a <!-- b --> c -->` ends at the FIRST
+ *     `-->`, leaving ` c -->` as visible text. A greedy regex would have
+ *     swallowed the lot and hidden text a reviewer can plainly see.
+ *   · An UNCLOSED `<!--` runs to the end of the document, which is what HTML
+ *     does and what GitHub renders — everything after it is invisible.
+ *
+ * Matching what the reviewer SEES is the whole point: the guard and the human
+ * must be reading the same document. And the fail-safe direction holds — a
+ * body that hides a Fate line behind an unclosed comment also hides it from
+ * the reviewer, so no absorption is being claimed; the file-based detector
+ * (`added` under `kernel/capabilities/`) still fires regardless, because it
+ * reads the diff and cannot be spoofed by body text at all.
+ */
+function stripHtmlComments(s) {
+  let out = "";
+  let i = 0;
+  for (;;) {
+    const open = s.indexOf("<!--", i);
+    if (open === -1) return out + s.slice(i);
+    out += s.slice(i, open);
+    const close = s.indexOf("-->", open + 4);
+    if (close === -1) return out; // unterminated: the rest is comment
+    i = close + 3;
+  }
+}
+
+const body = stripHtmlComments(rawBody);
 
 const errors = [];
 const warnings = [];

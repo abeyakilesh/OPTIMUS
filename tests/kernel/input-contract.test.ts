@@ -33,6 +33,7 @@ const anyManifest = (over: Partial<CapabilityManifest> = {}): CapabilityManifest
   // in a test is exactly the kind of thing that gets copied into a real
   // manifest: the output door has its own suite in output-contract.test.ts.
   outputs: { ok: { kind: "boolean" }, n: { kind: "number" }, title: { kind: "string" } },
+  outputTrust: { ok: "capability", n: "capability", title: "capability" },
   defaultBudget: { maxAttempts: 1, maxWallTimeMs: 1_000, maxCost: 1 },
   description: "fixture",
   ...over,

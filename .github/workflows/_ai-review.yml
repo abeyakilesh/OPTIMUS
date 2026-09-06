@@ -73,7 +73,19 @@ jobs:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # Bind to loopback only. Never expose the gateway off the runner.
-          HOST: 127.0.0.1
+          #
+          # `HOST` IS THE WRONG VARIABLE AND WAS DOING NOTHING. OmniRoute
+          # v3.8.50 prints, on every start under this workflow:
+          #
+          #   ⚠ SECURITY: listening on 0.0.0.0 with NO API-key requirement …
+          #     bind loopback with OMNIROUTE_SERVER_HOST=127.0.0.1
+          #
+          # So the comment above described a control that did not exist — the
+          # gateway was reachable on every interface of the runner for the life
+          # of the job, while the workflow read as though it were confined.
+          # THE ENFORCEMENT RULE: the mechanism is named on the line now.
+          OMNIROUTE_SERVER_HOST: 127.0.0.1
+          HOST: 127.0.0.1 # kept: harmless, and some builds do read it
           PORT: "20128"
         run: |
           # `npm i -g omniroute` pulls ~1,200 packages (tfjs, transformers,
@@ -122,13 +134,51 @@ jobs:
           }
           nohup omniroute > /tmp/omniroute.log 2>&1 &
           # Health-gate the startup rather than sleeping a fixed amount.
+          #
+          # THE PROBE ASKS "IS IT ANSWERING", NOT "IS THIS ENDPOINT AUTHORISED",
+          # and the difference is what blocked every PR in the repo.
+          #
+          # It was `curl -sf .../v1/models`. `-f` makes curl exit non-zero on
+          # any status >= 400, so an endpoint that answers 401 or 404 is
+          # indistinguishable from a socket that is not listening. OmniRoute's
+          # API is authenticated — `setup-local-ollama-provider.sh` logs in at
+          # `/api/auth/login` before it can call `/api/provider-nodes` — so the
+          # unauthenticated probe never returned 2xx. The gateway's own log in
+          # the same job said `✔ OmniRoute is running! (started in 2.5s)` while
+          # this loop counted to 60 and reported it dead.
+          #
+          # That is the defect this file's own comments are about: a failure
+          # that misreports its own cause. Readiness is "the process accepts a
+          # connection and speaks HTTP". Whether a given route needs a cookie
+          # is a different question and not this loop's business.
+          #
+          # `%{http_code}` is `000` when curl could not connect at all, which
+          # is the only condition that still means "not up yet". Any real
+          # status — 200, 401, 404 — means the server is there.
+          last=""
           for i in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:20128/v1/models >/dev/null 2>&1; then
-              echo "Gateway up after ${i}s"; exit 0
+            # `|| last="000"`, NOT `|| echo 000` inside the substitution: on a
+            # refused connection curl BOTH prints `000` and exits non-zero, so
+            # the echo would append a second one and `last` would be "000000"
+            # — not equal to "000", so the loop would declare the gateway up.
+            # A retry guard that reports success on failure is the same defect
+            # as the install retry two steps above.
+            last=$(curl -s -o /tmp/probe.out -w '%{http_code}' --max-time 5 \
+                     http://127.0.0.1:20128/v1/models 2>/dev/null) || last="000"
+            if [ "$last" != "000" ]; then
+              echo "Gateway up after ${i}s (HTTP ${last} from /v1/models)"
+              exit 0
             fi
             sleep 1
           done
-          echo "::error::OmniRoute did not become healthy in 60s."
+          # Say what was actually observed. The previous message asserted a
+          # cause it had not measured.
+          echo "::error::OmniRoute never accepted a connection on 127.0.0.1:20128 in 60s (last curl code: ${last})."
+          echo "----- probe body (last attempt) -----"
+          cat /tmp/probe.out 2>/dev/null || true
+          echo "----- listening sockets -----"
+          (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | head -20 || true
+          echo "----- gateway log -----"
           tail -50 /tmp/omniroute.log
           exit 1
 
