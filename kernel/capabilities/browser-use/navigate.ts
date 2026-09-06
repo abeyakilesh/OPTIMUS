@@ -176,15 +176,19 @@ export const browserNavigate: Capability = {
     //   · `url` is untrusted too, and it is the one people get wrong: it is
     //     the address AFTER redirects, so the destination chose it, not us.
     //     The input `url` was ours; this one is a result.
-    //   · `ok` is our bridge's verdict on whether navigation completed,
-    //     `error` is our bridge's own message, and `artifactId` is a hash
-    //     computed on this side. A page cannot set any of the three.
+    //   · `error` is untrusted as well, corrected after review caught the
+    //     same mistake in llm.chat. bridge.py catches broadly and returns
+    //     `f"{type(error).__name__}: {error}"`, so a CDP or browser-use
+    //     exception carries whatever the page put in it. "Our bridge wrote the
+    //     string" describes the FORMAT, not the contents.
+    //   · `ok` is our bridge's own boolean and `artifactId` is a hash computed
+    //     on this side. A page cannot set either.
     outputTrust: {
       ok: "capability",
       url: "untrusted",
       title: "untrusted",
       text: "untrusted",
-      error: "capability",
+      error: "untrusted",
       artifactId: "capability",
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: 45_000, maxCost: 20 },

@@ -186,9 +186,20 @@ export const llmChat: Capability = {
     // attacker text into a summary hand that summary onward as trusted, and
     // the fence around the original would have bought nothing.
     //
-    // The rest is transport OPTIMUS observed: `status` is the HTTP code,
-    // `ok`/`error` are this adapter's verdict, `model` is the id the router
-    // reported, `usage` is a token count, `artifactId` a hash computed here.
+    // `error` IS UNTRUSTED TOO, and the first version of this manifest got it
+    // wrong. `extractErrorMessage` returns `parsed.error.message` — the
+    // provider's own JSON body, verbatim — so calling it "this adapter's
+    // verdict" described the FUNCTION while the VALUE is provider-controlled
+    // text. That is `purity-mistaken-for-trust`, made in the very PR that
+    // added the class to the registry.
+    //
+    // Reachable, not theoretical: an `ok: false` response is still sealed and
+    // can feed a dependent step in any mission that checks `artifact.intact`
+    // rather than `llm.chatSucceeded`.
+    //
+    // The rest is transport OPTIMUS observed: `status` is the HTTP code, `ok`
+    // is this adapter's own boolean, `model` is the id the router reported,
+    // `usage` is a token count, `artifactId` a hash computed here.
     //
     // This is also why a compiled plan cannot chain two `llm.chat` steps into
     // each other's `kernel` messages — the check refuses it structurally
@@ -199,7 +210,7 @@ export const llmChat: Capability = {
       model: "capability",
       content: "untrusted",
       usage: "capability",
-      error: "capability",
+      error: "untrusted",
       artifactId: "capability",
     },
     defaultBudget: { maxAttempts: 2, maxWallTimeMs: DEFAULT_TIMEOUT_MS, maxCost: 20 },

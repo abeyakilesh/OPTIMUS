@@ -67,10 +67,24 @@ would punish caution and push plan authors toward the weaker tag.
 
 ## Consequences
 
-`llm.chat` becomes selectable by the plan compiler — the blocker PR #74
-recorded in its own body. A compiled plan cannot chain two `llm.chat` steps
-into each other's `kernel` messages, and cannot present a fetched page as
-operator intent.
+**`llm.chat` does NOT become selectable, and an earlier draft of this ADR said
+it did.** PR #74 recorded selection as "Blocked on #70", which made
+"selectable now" the obvious consequence to write down. It is wrong, and it was
+caught in review rather than by a test — worth recording, because an ADR
+claiming a product change the same commit declines to make is the defect the
+neighbouring rules exist to prevent, in the document justifying a rule about
+honest declarations.
+
+What this actually delivers is **half** of that blocker. A message whose content
+is a `$from` reference is now structurally forced to carry the producing
+field's real trust, so a compiled plan cannot chain two `llm.chat` steps into
+each other's `kernel` messages and cannot present a fetched page as operator
+intent. The remaining half is the **literal**: the model writes every literal
+in a compiled plan, so tagging one `kernel` is still a lie with no reference to
+check it against. `CAPABILITY_SELECTION` keeps `selectable: false` and its
+reason string now says exactly this. The honest fix is a rule that `llm.chat`
+message content must be a reference and never a literal — its own decision and
+its own PR.
 
 `llm.chat.content` is declared **untrusted**, which is the least intuitive line
 in the kernel and the one most likely to be "corrected" later. Nothing attacked

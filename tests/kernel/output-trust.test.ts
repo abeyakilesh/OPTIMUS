@@ -188,6 +188,32 @@ describe("a capability must say who authored each field it returns", () => {
     expect(untrusted).toContain("html.extractTitle.title");
   });
 
+  it("every field that carries text from outside the boundary says so", () => {
+    // Pinned by name, because the argument for each of these is a paragraph of
+    // reasoning that a later reader can talk themselves out of. Two `error`
+    // rows were `capability` in the first version of this PR and were caught
+    // in review, not by a test — the reasoning was "our adapter wrote that
+    // string", which describes the FORMAT while the CONTENTS come from a
+    // provider (`extractErrorMessage` returns `parsed.error.message`) or from
+    // any exception the browser child raised (`bridge.py`'s broad `except`).
+    const expected: Record<string, string[]> = {
+      "html.extractTitle": ["title"],
+      "browser.navigate": ["url", "title", "text", "error"],
+      "scrapling.relocate": ["matches"],
+      "llm.chat": ["content", "error"],
+      "web.fetch": [],
+    };
+    for (const cap of ALL_CAPABILITIES) {
+      const want = expected[cap.manifest.id];
+      if (!want) continue; // a capability absorbed after this was written
+      const got = Object.entries(cap.manifest.outputTrust)
+        .filter(([, level]) => level === "untrusted")
+        .map(([f]) => f)
+        .sort();
+      expect(got, cap.manifest.id).toEqual([...want].sort());
+    }
+  });
+
   it("an unknown field reads as untrusted, not as trusted", () => {
     // Unreachable through the broker — registration proves completeness. It is
     // the answer given to a caller asking about a field nobody declared, and
