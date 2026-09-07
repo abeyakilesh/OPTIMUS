@@ -134,14 +134,27 @@ export function extractRepoRefs(markdown: string): string[] {
   const OWNER = "[A-Za-z0-9](?:[A-Za-z0-9._-]{0,38})";
   const REPO = "[A-Za-z0-9._-]{1,100}";
 
-  for (const m of markdown.matchAll(
-    new RegExp(`https?://(?:www\\.)?github\\.com/(${OWNER})/(${REPO})`, "g"),
-  )) {
-    add(m[1], m[2]);
+  // ONE PASS, because the contract above says "in order" and two passes cannot
+  // keep that promise: the first draft exhausted every URL before looking at a
+  // single backtick, so a document mixing the forms came back reordered.
+  //
+  // Caught in review on #85 — and the test I wrote had ENCODED the bug, using
+  // a fixture whose expected order was the buggy one. A test written from the
+  // implementation agrees with the implementation.
+  //
+  // Order matters downstream: the downloader works the list top to bottom, and
+  // the document is arranged by priority wave, so a reordered list silently
+  // reprioritises the work.
+  const both = new RegExp(
+    `https?://(?:www\\.)?github\\.com/(${OWNER})/(${REPO})` + "|" + "`(" + OWNER + ")/(" + REPO + ")`",
+    "g",
+  );
+  for (const m of markdown.matchAll(both)) {
+    const owner = m[1] ?? m[3];
+    const repo = m[2] ?? m[4];
+    if (owner && repo) add(owner, repo);
   }
-  for (const m of markdown.matchAll(new RegExp("`(" + OWNER + ")/(" + REPO + ")`", "g"))) {
-    add(m[1], m[2]);
-  }
+
   return out;
 }
 

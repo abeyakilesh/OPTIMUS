@@ -130,9 +130,27 @@ describe("fs.readFile stays inside the operator-declared root", () => {
 /* ══ the parser ════════════════════════════════════════════════════════════ */
 
 describe("extractRepoRefs finds repos and not path-shaped noise", () => {
-  it("reads both forms the document actually uses", () => {
+  it("reads both forms the document actually uses, IN DOCUMENT ORDER", () => {
+    // This assertion used to read ["honojs/hono", "prisma/prisma"] — the order
+    // two separate regex passes produced, not the order the document reads in.
+    // The test had been written from the implementation, so it agreed with the
+    // implementation and proved nothing. Caught in review on #85.
+    //
+    // Order is not cosmetic: the downloader works the list top to bottom and
+    // the document is arranged by priority wave, so a reordered list silently
+    // reprioritises the work.
     const md = "Use `prisma/prisma` or https://github.com/honojs/hono for this.";
-    expect(extractRepoRefs(md)).toEqual(["honojs/hono", "prisma/prisma"]);
+    expect(extractRepoRefs(md)).toEqual(["prisma/prisma", "honojs/hono"]);
+  });
+
+  it("keeps document order across many mixed references", () => {
+    const md = [
+      "1. `a/one`",
+      "2. https://github.com/b/two",
+      "3. `c/three`",
+      "4. https://github.com/d/four",
+    ].join("\n");
+    expect(extractRepoRefs(md)).toEqual(["a/one", "b/two", "c/three", "d/four"]);
   });
 
   it("does NOT match slug-shaped prose that is not a repo", () => {
