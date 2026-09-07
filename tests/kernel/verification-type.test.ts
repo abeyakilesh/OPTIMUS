@@ -212,7 +212,12 @@ describe("the kernel labels the results it synthesises", () => {
       },
     };
     const { harness } = kernel(mutable);
-    (mutable as { verification: VerificationType[] }).verification = ["reasoned", "observed"];
+    // Through `unknown`: `Check.verification` is readonly, which is exactly
+    // what a caller determined to widen it would defeat at runtime.
+    (mutable as unknown as { verification: VerificationType[] }).verification = [
+      "reasoned",
+      "observed",
+    ];
 
     const outcome = await harness.runStep(step(["mutable.check"]));
     expect(outcome.status, "the broker kept a snapshot, so the widening had no effect").not.toBe(
