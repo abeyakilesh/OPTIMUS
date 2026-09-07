@@ -13,6 +13,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/unit/**/*.test.ts", "tests/kernel/**/*.test.ts"],
+    // Fails any test that reaches the real network. See the file for why a
+    // green suite is not evidence that a test double was installed (#89).
+    setupFiles: ["./tests/setup/no-real-network.ts"],
     reporters: "verbose",
   },
 });
