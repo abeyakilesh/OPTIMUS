@@ -67,6 +67,20 @@ export const CAPABILITY_SELECTION: Readonly<
     selectable: true,
     reason: "zero permissions; reads through the artifact store, not the world",
   },
+  "fs.readFile": {
+    selectable: true,
+    reason:
+      "fs:read bounded to an OPERATOR-declared root (OPTIMUS_TASKLIST_ROOT), defaulting to the " +
+      "repo. Step input may select a path within that root and can never extend it — the same " +
+      "trust split as browser.navigate's executable allow-list. Reading is not writing, and " +
+      "requirePathWithin resolves symlinks before comparing, so escape is refused by the " +
+      "boundary rather than by a string test. The operator widening the root widens what a " +
+      "compiled plan can read, and that is their decision to make knowingly",
+  },
+  "repos.extract": {
+    selectable: true,
+    reason: "zero permissions; parses a stored document through the artifact store, like html.extractTitle",
+  },
   "scrapling.relocate": {
     selectable: true,
     reason: "zero permissions, pure computation over its own input; 2 goldens, 1 re-derived in CI",
