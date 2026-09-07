@@ -295,6 +295,7 @@ describe("mutation: the tests above fail when the feature is removed", () => {
         expect(result.state.steps.fetch.status).toBe("passed");
         expect(result.state.steps.extract.evidence?.checks[0]).toMatchObject({
           checkId: "input.unresolvable",
+          verification: "reasoned",
         });
       },
     );

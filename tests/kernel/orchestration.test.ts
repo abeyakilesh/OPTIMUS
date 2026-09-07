@@ -52,16 +52,18 @@ class Timeline {
 const alwaysPasses: Check = {
   id: "always.passes",
   appliesTo: { kind: "outputs", requires: [] },
+  verification: ["reasoned"],
   async run() {
-    return { checkId: "always.passes", passed: true, reason: "ok" };
+    return { verification: "reasoned", checkId: "always.passes", passed: true, reason: "ok" };
   },
 };
 
 const alwaysFails: Check = {
   id: "always.fails",
   appliesTo: { kind: "outputs", requires: [] },
+  verification: ["reasoned"],
   async run() {
-    return { checkId: "always.fails", passed: false, reason: "designed to fail" };
+    return { verification: "reasoned", checkId: "always.fails", passed: false, reason: "designed to fail" };
   },
 };
 
@@ -319,10 +321,12 @@ describe("multi-agent orchestration", () => {
     broker.registerCheck({
       id: "title.nonEmpty",
       appliesTo: { kind: "outputs", requires: ["title"] },
+      verification: ["reasoned"],
       async run(output) {
         const title = (output as { title?: string }).title;
         return {
           checkId: "title.nonEmpty",
+          verification: "reasoned",
           passed: Boolean(title),
           reason: title ? "has a title" : "empty title",
         };
