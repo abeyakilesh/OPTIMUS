@@ -133,6 +133,12 @@ export const htmlExtractTitle: Capability = {
 
 export const titleNonEmpty: Check = {
   id: "title.nonEmpty",
+  // Reads `output.title` and nothing else, so the rule is the FIELD, not a
+  // capability list. That broadens it correctly: `browser.navigate` also
+  // declares `title`, and asking whether a navigated page had a real title is
+  // exactly as meaningful as asking it of an extracted one. The compiler's
+  // old stand-in map listed only html.extractTitle and was too narrow.
+  appliesTo: { kind: "outputs", requires: ["title"] },
   async run(output): Promise<CheckResult> {
     const title = (output as { title?: unknown })?.title;
     if (typeof title !== "string" || title.trim().length === 0) {
@@ -171,6 +177,11 @@ export const titleNonEmpty: Check = {
  */
 export const artifactIntact: Check = {
   id: "artifact.intact",
+  // The case #71 was filed around: this applies to anything returning an
+  // artifactId — five capabilities today. Declared as the FIELD so it cannot
+  // go stale; a sixth capability is covered the moment it registers, with
+  // nothing to remember and no list to edit.
+  appliesTo: { kind: "outputs", requires: ["artifactId"] },
   async run(output, ctx): Promise<CheckResult> {
     const id = (output as { artifactId?: unknown })?.artifactId;
     if (typeof id !== "string") {
@@ -207,6 +218,11 @@ export const artifactIntact: Check = {
 export function expectArtifact(expectedId: string): Check {
   return {
     id: `artifact.equals:${expectedId}`,
+    // #71 flagged this one specifically: "expectArtifact(id) is a check
+    // FACTORY, so its applicability is per-instance." It is not — the id
+    // varies per instance, the SHAPE it reads does not. Every instance reads
+    // `output.artifactId`, so every instance declares the same field rule.
+    appliesTo: { kind: "outputs", requires: ["artifactId"] },
     async run(output): Promise<CheckResult> {
       const id = (output as { artifactId?: unknown })?.artifactId;
       const passed = id === expectedId;

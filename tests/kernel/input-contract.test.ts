@@ -274,6 +274,7 @@ describe("input produced by a repair is checked like any other", () => {
     });
     broker.registerCheck({
       id: "never.passes",
+      appliesTo: { kind: "outputs", requires: [] },
       async run() {
         return { checkId: "never.passes", passed: false, reason: "by design" };
       },

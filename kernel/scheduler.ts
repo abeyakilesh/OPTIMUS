@@ -17,6 +17,7 @@ import type { MissionSpec, MissionState, StepSpec, StepState } from "./types";
 import { EventLog, fold, type KernelEvent } from "./events";
 import { Harness, type Repair } from "./harness";
 import { referencesIn, resolveInput, validateReferences } from "./references";
+import { validatePlanChecks } from "./checkContract";
 
 export class SchedulerError extends Error {}
 
@@ -106,6 +107,12 @@ export class Scheduler {
     // first: without it a reference could only fail at runtime, several steps
     // into a mission, as an `undefined`.
     validateReferences(spec, this.deps.harness.broker);
+    // #71, the third question: does every check UNDERSTAND the capability it
+    // is attached to? `broker.check()` already refuses an unregistered id;
+    // this refuses a registered one that reads fields its step never returns.
+    // Such a plan is valid, runnable, and guaranteed red — so it is refused
+    // here rather than discovered with the budget half spent.
+    validatePlanChecks(spec, this.deps.harness.broker);
 
     const log = new EventLog();
     const emit = (event: KernelEvent): void => {

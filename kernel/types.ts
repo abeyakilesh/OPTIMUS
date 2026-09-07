@@ -9,6 +9,7 @@
 import type { Isolation } from "./sandbox";
 import type { InputConstraints } from "./inputContract";
 import type { OutputConstraints, OutputTrust } from "./outputContract";
+import type { CheckApplicability } from "./checkContract";
 export type { Isolation };
 
 /** Content-addressed artifact id: "sha256:<64 hex>". */
@@ -369,6 +370,16 @@ export interface NetFetchResult {
 /** A check the verification spine can run. */
 export interface Check {
   id: string;
+  /**
+   * Which capabilities this check can verify. REQUIRED — see
+   * kernel/checkContract.ts for why, and for why there are two kinds.
+   *
+   * Without it a plan could pair `browser.navigateSucceeded` with
+   * `html.extractTitle`: valid, runnable, and guaranteed red, because the
+   * check reads a field that capability never returns. The kernel could
+   * refuse an unregistered check and not an inapplicable one.
+   */
+  appliesTo: CheckApplicability;
   /**
    * `output` is whatever the capability returned. Checks must be able to
    * FAIL — a check that cannot fail is not a check.
