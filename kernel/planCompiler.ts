@@ -85,6 +85,14 @@ export const CAPABILITY_SELECTION: Readonly<
       "environment and there is deliberately no input field for a token: step input is written " +
       "by a model and must never carry a secret",
   },
+  "git.clone": {
+    selectable: false,
+    reason:
+      "isolation.unconfinedChildEgress — the clone's network traffic happens inside a git child " +
+      "process the kernel cannot police, so its blast radius is whatever that OS user can reach. " +
+      "Same ceiling as browser.navigate, same blocker (codesandbox-sdk). ACT plane, and the " +
+      "#84 mission that uses it is hand-written and human-approved rather than compiled",
+  },
   "repos.extract": {
     selectable: true,
     reason: "zero permissions; parses a stored document through the artifact store, like html.extractTitle",
