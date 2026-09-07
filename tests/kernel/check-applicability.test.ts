@@ -15,7 +15,6 @@ import {
   checkAppliesTo,
   applicableCheckIds,
   validatePlanChecks,
-  CheckContractError,
   type CheckApplicability,
 } from "../../kernel/checkContract";
 import type { Check, MissionSpec } from "../../kernel/types";
@@ -198,7 +197,7 @@ describe("a plan pairing a check with a capability it cannot read is refused", (
 
   it("THE SCHEDULER refuses it — not merely the helper", () => {
     // The guarantee is worthless if only a function nobody calls enforces it.
-    const { broker, harness } = kernel();
+    const { harness } = kernel();
     const scheduler = new Scheduler({ harness });
     return expect(
       scheduler.run(planPairing("web.fetch", ["browser.navigateSucceeded"])),
