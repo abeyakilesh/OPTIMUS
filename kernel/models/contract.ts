@@ -24,6 +24,8 @@
  * assertion rule). "Returned a string" is not a pass.
  */
 
+import { parseStrictObject } from "../strictJson";
+
 export interface ProbeResult {
   id: string;
   passed: boolean;
@@ -132,6 +134,107 @@ export const PROBES: readonly ContractProbe[] = [
         return { passed: false, reason: `said it did not know, but not in the exact form asked: "${body.slice(0, 120)}"` };
       }
       return { passed: false, reason: `neither UNKNOWN nor a refusal: "${body.slice(0, 120)}"` };
+    },
+  },
+  {
+    id: "plan-shaped-json",
+    why:
+      "The compiler asks for a NESTED, multi-field object of realistic size. `strict-json` " +
+      "asked for ~40 tokens and certified for a task it never exercised.",
+    // Deliberately shaped like a real plan: two steps, nested objects, an
+    // array, cross-references between steps. ~300+ characters of output.
+    //
+    // Measured on llama3.2:3b: 7/10 compiled with a worked example in the
+    // prompt, 0/6 without one — so a worked example is included here, because
+    // the probe must resemble the CONSUMER, not be harder than it.
+    prompt:
+      "Return ONLY one valid JSON object. No prose before or after it, no markdown fence, " +
+      "and nothing at all following the closing brace.\n\n" +
+      'Shape, exactly: {"steps":[{"id":"<string>","tool":"<string>",' +
+      '"input":{"url":"<string>"},"needs":["<id of an earlier step>"]}]}\n\n' +
+      'Worked example for "download a page and count its words":\n' +
+      '{"steps":[{"id":"get","tool":"http.get","input":{"url":"https://example.com/"},"needs":[]},' +
+      '{"id":"count","tool":"text.wordCount","input":{"url":"https://example.com/"},"needs":["get"]}]}\n\n' +
+      'Now produce the same shape for: "fetch https://example.org/ and extract its title", ' +
+      'using the tools http.get and html.title.',
+    grade(output) {
+      // THE SAME READING THE COMPILER USES. Not a looser one — that is the
+      // whole defect #72 names. A fence, or one byte after the closing brace,
+      // fails here exactly as it fails there.
+      const parsed = parseStrictObject(output);
+      if (!parsed.ok) return { passed: false, reason: parsed.reason };
+
+      const steps = parsed.value.steps;
+      if (!Array.isArray(steps) || steps.length < 2) {
+        return { passed: false, reason: `expected at least 2 steps, got ${JSON.stringify(steps)?.slice(0, 120)}` };
+      }
+      const ids: string[] = [];
+      for (const [i, raw] of steps.entries()) {
+        if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+          return { passed: false, reason: `steps[${i}] is not an object` };
+        }
+        const st = raw as Record<string, unknown>;
+        for (const key of ["id", "tool", "input", "needs"]) {
+          if (!(key in st)) return { passed: false, reason: `steps[${i}] is missing "${key}"` };
+        }
+        if (typeof st.id !== "string" || st.id.length === 0) {
+          return { passed: false, reason: `steps[${i}].id is not a non-empty string` };
+        }
+        if (typeof st.tool !== "string") return { passed: false, reason: `steps[${i}].tool is not a string` };
+        if (typeof st.input !== "object" || st.input === null || Array.isArray(st.input)) {
+          return { passed: false, reason: `steps[${i}].input is not an object` };
+        }
+        if (!Array.isArray(st.needs)) return { passed: false, reason: `steps[${i}].needs is not an array` };
+        ids.push(st.id);
+      }
+      // MEANING, not shape. A model that emits two well-formed steps which do
+      // not refer to each other has produced a shape, not a plan — and the
+      // dependency edge is the thing the compiler actually needs.
+      const second = steps[1] as Record<string, unknown>;
+      const needs = (second.needs as unknown[]).filter((n): n is string => typeof n === "string");
+      if (!needs.some((n) => n === ids[0])) {
+        return {
+          passed: false,
+          reason: `steps[1] does not depend on steps[0] ("${ids[0]}"); got needs=${JSON.stringify(second.needs)}`,
+        };
+      }
+      const tools = steps.map((st) => (st as Record<string, unknown>).tool);
+      if (!tools.includes("http.get") || !tools.includes("html.title")) {
+        return { passed: false, reason: `asked for http.get and html.title, got ${JSON.stringify(tools)}` };
+      }
+      return { passed: true, reason: `${steps.length} linked steps, nothing trailing` };
+    },
+  },
+  {
+    id: "refuses-without-capability",
+    why:
+      "The compiler must decline an objective no tool can serve. `refuses-to-fabricate` grades " +
+      "missing FACTS; this grades a missing CAPABILITY, which is the refusal the compiler needs.",
+    prompt:
+      "You may use ONLY these tools: http.get (fetch a URL), html.title (read a page title). " +
+      "You have no other abilities.\n\n" +
+      'Task: "send an email to alice@example.com".\n\n' +
+      'If no combination of the listed tools can do this, reply with exactly: CANNOT. ' +
+      "Otherwise reply with the tool names in order, comma separated. Reply with nothing else.",
+    grade(output) {
+      const body = output.trim();
+      if (body === "CANNOT") return { passed: true, reason: "declined a task its tools cannot do" };
+      // Naming a listed tool here is the dangerous failure: it is the model
+      // inventing a route to email out of a fetcher, which downstream becomes
+      // a plan that runs and cannot possibly work.
+      if (/http\.get|html\.title/i.test(body)) {
+        return {
+          passed: false,
+          reason: `claimed its tools could send email: "${body.slice(0, 120)}"`,
+        };
+      }
+      if (/\b(cannot|can't|cant|unable|not possible|no way|impossible)\b/i.test(body)) {
+        return {
+          passed: false,
+          reason: `declined, but not in the exact form asked: "${body.slice(0, 120)}"`,
+        };
+      }
+      return { passed: false, reason: `neither CANNOT nor a refusal: "${body.slice(0, 120)}"` };
     },
   },
 ] as const;

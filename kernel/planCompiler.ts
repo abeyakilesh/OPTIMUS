@@ -31,6 +31,7 @@ import { validateReferences } from "./references";
 import { applicableCheckIds, checkAppliesTo, describeApplicability } from "./checkContract";
 import { REFERENCE_KEY, holdsReferenceKey } from "./references";
 import { checkInput } from "./inputContract";
+import { unfence, trailingAfterFirstObject } from "./strictJson";
 
 export class PlanCompilerError extends Error {}
 
@@ -354,49 +355,11 @@ function literalInputViolations(broker: Broker, capabilityId: string, input: unk
   );
 }
 
-/** Strips a markdown fence, matching the model contract's `strict-json` probe. */
-function unfence(raw: string): string {
-  const match = /^```(?:json)?\s*\n([\s\S]*?)\n?```$/.exec(raw.trim());
-  return match ? match[1].trim() : raw.trim();
-}
+// `unfence` and `trailingAfterFirstObject` moved to ./strictJson in #72, so
+// the model contract's probe and this consumer read model output the SAME way.
+// A probe lenient where its consumer is strict certifies behaviour the consumer
+// will reject.
 
-/**
- * If `text` starts with a complete JSON object followed by more non-whitespace,
- * return that trailing text. Otherwise `undefined`.
- *
- * A brace-depth scan that respects strings and escapes — not a regex, because
- * the thing being scanned is model output and a backtracking pattern over
- * untrusted text is a denial-of-service surface (same reasoning as
- * `inputContract.ts` refusing to compile patterns).
- */
-function trailingAfterFirstObject(text: string): string | undefined {
-  if (text[0] !== "{") return undefined;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (inString) {
-      if (ch === "\\") escaped = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') inString = true;
-    else if (ch === "{") depth += 1;
-    else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        const rest = text.slice(i + 1).trim();
-        return rest.length > 0 ? rest : undefined;
-      }
-    }
-  }
-  return undefined;
-}
 
 function refusal(reason: string, refusedByModel = false): CompileResult {
   return { ok: false, reason, refusedByModel };
