@@ -65,6 +65,7 @@ function allowedGit(): readonly string[] {
 
 export interface GitCloneOutput {
   repo: string;
+  expectedSha: string;
   path: string;
   sha: string;
   files: number;
@@ -89,6 +90,16 @@ export const gitClone: Capability = {
       // exists where none does. Closable only by an OS network namespace or a
       // microVM — blocked on codesandbox-sdk, exactly as browser.navigate is.
       unconfinedChildEgress: true,
+      // A clone CREATES a tree; it never edits one. Snapshot rollback would
+      // read every byte of every previously-cloned repository before each new
+      // step — and it correctly refused on the second repo of the #84 run,
+      // 5,470 files past a 5,000 cap. Discarding what this step created is
+      // both cheaper and a better description of what undoing a clone means.
+      //
+      // Safe here specifically because git refuses to clone into a non-empty
+      // directory, so this capability cannot modify something that predates
+      // it — the exact condition the strategy's stated limit requires.
+      rollback: "discard-created",
     },
     inputConstraints: {
       repo: { kind: "string", required: true, minLength: 3, maxLength: 140 },
@@ -97,9 +108,22 @@ export const gitClone: Capability = {
       // problem instead of surfacing as a path violation one layer down.
       dest: { kind: "string", required: true, minLength: 1, maxLength: 100 },
       gitExecutable: { kind: "executable", allowed: allowedGit() },
+      // REQUIRED, deliberately. A clone with nothing to compare against is an
+      // unverifiable clone: `repo.intact` would have no reference and would
+      // fail anyway. Requiring it here moves that failure to the input door,
+      // where the message names the real problem, instead of surfacing three
+      // steps later as a check with nothing to check.
+      //
+      // It also makes the dependency STRUCTURAL: this capability cannot be
+      // placed in a plan without github.resolve above it.
+      expectedSha: { kind: "string", required: true, minLength: 40, maxLength: 40 },
     },
     outputs: {
       repo: { kind: "string", required: true },
+      // Carried through untouched so the check receives BOTH values and the
+      // comparison is visible in one place. The kernel logs where it came
+      // from (`step.resolved`), so echoing it does not launder its origin.
+      expectedSha: { kind: "string", required: true, minLength: 40, maxLength: 40 },
       path: { kind: "string", required: true },
       sha: { kind: "string", required: true, minLength: 40, maxLength: 40 },
       files: { kind: "number", required: true, integer: true, min: 0 },
@@ -113,6 +137,10 @@ export const gitClone: Capability = {
     // `path` is ours (we constructed it). `repo` is echoed from our input.
     outputTrust: {
       repo: "capability",
+      // STILL untrusted after passing through us. Provenance does not improve
+      // by being copied — it came from GitHub, and re-emitting it from a
+      // capability must not relabel it as something we determined.
+      expectedSha: "untrusted",
       path: "capability",
       sha: "capability",
       files: "capability",
@@ -123,9 +151,10 @@ export const gitClone: Capability = {
       "Shallow-clone a GitHub repository into the download root and report the commit that landed.",
   },
   async run(input, ctx) {
-    const { repo, dest, gitExecutable = "git" } = input as {
+    const { repo, dest, expectedSha, gitExecutable = "git" } = input as {
       repo: string;
       dest: string;
+      expectedSha: string;
       gitExecutable?: string;
     };
     if (!REPO_REF.test(repo)) throw new Error(`git.clone: "${repo}" is not owner/repo`);
@@ -179,9 +208,12 @@ export const gitClone: Capability = {
       : 0;
 
     const artifactId = await ctx.putArtifact(
-      JSON.stringify({ repo, path: target, sha, files, clonedAt: new Date().toISOString() }, null, 2),
+      JSON.stringify({ repo, expectedSha, path: target, sha, files, clonedAt: new Date().toISOString() }, null, 2),
     );
-    return { repo, path: target, sha, files, artifactId } satisfies GitCloneOutput;
+    // NOT compared here. This capability reports what it observed; deciding
+    // whether that matches is the check's job, and a capability that graded
+    // its own work would make `repo.intact` unfalsifiable.
+    return { repo, expectedSha, path: target, sha, files, artifactId } satisfies GitCloneOutput;
   },
 };
 

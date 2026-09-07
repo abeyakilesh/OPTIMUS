@@ -28,13 +28,21 @@
   --color-line: #e6e9ec;          /* borders */
   --color-line-2: #d5dade;        /* stronger borders */
 
-  /* ── the only 2 non-palette hues, and they are SEMANTIC, not decorative.
+  /* ── the only 3 non-palette hues, and they are SEMANTIC, not decorative.
      They encode mission state and nothing else. Never use them for
-     backgrounds, headings, buttons or "visual interest". ── */
+     backgrounds, headings, buttons or "visual interest".
+
+     WAS TWO UNTIL THE CANVAS EXISTED. A graph must distinguish a step that is
+     RUNNING from one that FAILED, and with only amber and emerald available
+     the canvas would have had to reuse amber for both — conflating "working"
+     with "broken" on the one surface whose entire job is telling them apart.
+     Recorded here rather than silently contradicting the sentence above it. ── */
   --color-run: #f59e0b;           /* amber  — a step is executing */
   --color-run-soft: #fef3c7;
   --color-pass: #10b981;          /* emerald — verified, proof passed */
   --color-pass-soft: #d7f5e9;
+  --color-fail: #dc2626;          /* red — a check refused, or a step errored */
+  --color-fail-soft: #fee2e2;
 
   /* type */
   --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",

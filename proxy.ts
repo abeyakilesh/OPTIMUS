@@ -50,5 +50,10 @@ export const config = {
     "/settings",
     "/settings/:path*",
     "/api/providers/:path*",
+    // The graph is a mission's full evidence trail — every step, every
+    // artifact id, every check. Gated for the same reason /api/missions is.
+    "/api/graph/:path*",
+    "/missions",
+    "/missions/:path*",
   ],
 };

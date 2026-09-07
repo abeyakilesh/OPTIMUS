@@ -11,7 +11,8 @@
     "test": "vitest",
     "test:e2e": "playwright test",
     "scan": "ast-grep scan --config sgconfig.yml",
-    "mission": "tsx kernel/cli.ts"
+    "mission": "tsx kernel/cli.ts",
+    "download": "tsx kernel/downloadCli.ts"
   },
   "dependencies": {
     "htmlparser2": "^9.1.0",

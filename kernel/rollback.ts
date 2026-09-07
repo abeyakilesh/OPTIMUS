@@ -92,6 +92,17 @@ export async function rollback(store: ArtifactStore, snap: Snapshot): Promise<vo
  */
 const MAX_SNAPSHOT_FILES = 5_000;
 
+/**
+ * The `"discard-created"` counterpart to TreeSnapshot. Records only the direct
+ * entry NAMES at each root — no contents, no recursion — so its cost is the
+ * number of repositories in a download root, not the number of files in them.
+ */
+export interface CreatedEntriesSnapshot {
+  roots: readonly string[];
+  /** root path -> the direct entry names present before the step ran. */
+  entries: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
 export interface TreeSnapshot {
   roots: readonly string[];
   /** Absolute path → contents at snapshot time. Absent path = did not exist. */
@@ -113,6 +124,54 @@ async function walk(dir: string, out: string[]): Promise<void> {
     if (entry.isDirectory() && !entry.isSymbolicLink()) await walk(full, out);
     else out.push(full);
   }
+}
+
+/**
+ * Capture the direct entries at each root. Take this BEFORE the step runs.
+ *
+ * A missing root records an EMPTY SET rather than being skipped, which is the
+ * whole point for #84: the destination directory does not exist yet, so every
+ * entry the step creates is new and every one of them is removable on failure.
+ */
+export async function snapshotCreatedEntries(
+  roots: readonly string[],
+): Promise<CreatedEntriesSnapshot> {
+  const entries = new Map<string, ReadonlySet<string>>();
+  for (const root of roots) {
+    try {
+      entries.set(root, new Set((await readdir(root, { withFileTypes: true })).map((e) => e.name)));
+    } catch {
+      entries.set(root, new Set()); // does not exist yet — everything is new
+    }
+  }
+  return { roots, entries };
+}
+
+/**
+ * Remove whatever appeared at a root that was not there before.
+ *
+ * Deliberately does NOT touch pre-existing entries, even if the step modified
+ * them. That is the declared limit of this strategy (see Isolation.rollback),
+ * and silently deleting a directory that existed before would be a far worse
+ * failure than leaving one modified.
+ */
+export async function discardCreatedEntries(snap: CreatedEntriesSnapshot): Promise<boolean> {
+  let changed = false;
+  for (const root of snap.roots) {
+    const before = snap.entries.get(root) ?? new Set<string>();
+    let now;
+    try {
+      now = await readdir(root, { withFileTypes: true });
+    } catch {
+      continue; // root still absent — the step created nothing here
+    }
+    for (const entry of now) {
+      if (before.has(entry.name)) continue;
+      await rm(join(root, entry.name), { recursive: true, force: true });
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 /** Capture every file beneath `roots`. Take this BEFORE the step runs. */
