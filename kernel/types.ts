@@ -10,6 +10,7 @@ import type { Isolation } from "./sandbox";
 import type { InputConstraints } from "./inputContract";
 import type { OutputConstraints, OutputTrust } from "./outputContract";
 import type { CheckApplicability } from "./checkContract";
+import type { VerificationMethods, VerificationType } from "./verification";
 export type { Isolation };
 
 /** Content-addressed artifact id: "sha256:<64 hex>". */
@@ -156,6 +157,17 @@ export interface CheckResult {
   checkId: string;
   passed: boolean;
   reason: string;
+  /**
+   * HOW this run knew. REQUIRED — see kernel/verification.ts.
+   *
+   * Without it a check that reasoned over a returned value and a check that
+   * re-derived a hash produced identical evidence: `passed: true` either way.
+   * Atlas §14, "do not claim stronger evidence than actually exists", had no
+   * way to be stated here, so it also had no way to be checked.
+   *
+   * The harness refuses a result whose method the check did not declare.
+   */
+  verification: VerificationType;
   /** Anything the check wants preserved in evidence (measurements, diffs). */
   detail?: Record<string, unknown>;
 }
@@ -380,6 +392,15 @@ export interface Check {
    * refuse an unregistered check and not an inapplicable one.
    */
   appliesTo: CheckApplicability;
+  /**
+   * The verification methods this check may EVER use. REQUIRED, non-empty.
+   *
+   * A check whose method never varies declares one and returns it every time.
+   * One whose reach varies declares both and reports honestly per run — gate
+   * 11's fidelity harness is already that shape, re-running a parent where it
+   * is available and integrity-pinning where it is not.
+   */
+  verification: VerificationMethods;
   /**
    * `output` is whatever the capability returned. Checks must be able to
    * FAIL — a check that cannot fail is not a check.

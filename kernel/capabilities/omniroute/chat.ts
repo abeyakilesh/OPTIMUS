@@ -300,6 +300,7 @@ export const llmChat: Capability = {
  */
 export const llmChatSucceeded: Check = {
   id: "llm.chatSucceeded",
+  verification: ["reasoned"],
   // The other half of the pair described on browser.navigateSucceeded: both
   // read `ok`, neither is about `ok`.
   appliesTo: { kind: "capabilities", ids: ["llm.chat"] },
@@ -309,6 +310,7 @@ export const llmChatSucceeded: Check = {
     if (!result || result.ok !== true) {
       return {
         checkId: "llm.chatSucceeded",
+        verification: "reasoned",
         passed: false,
         reason: `chat completion did not succeed: ${result?.error ?? "unknown error"}`,
       };
@@ -316,6 +318,7 @@ export const llmChatSucceeded: Check = {
     if (!result.content || result.content.trim().length === 0) {
       return {
         checkId: "llm.chatSucceeded",
+        verification: "reasoned",
         passed: false,
         reason: "chat completion reported ok=true but returned no content",
       };
@@ -323,6 +326,7 @@ export const llmChatSucceeded: Check = {
 
     return {
       checkId: "llm.chatSucceeded",
+      verification: "reasoned",
       passed: true,
       reason: `model "${result.model}" replied with ${result.content.length} chars` +
         (result.usage?.totalTokens ? `, ${result.usage.totalTokens} tokens` : ""),

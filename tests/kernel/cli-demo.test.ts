@@ -71,7 +71,11 @@ describe("the walking-skeleton demo, run for real", () => {
   });
 
   it("extracts the real title, whitespace normalised", () => {
-    expect(output).toMatch(/title\.nonEmpty — title is 14 chars/);
+    // #63 put the METHOD in the trace between the id and the reason. Asserted
+    // here rather than loosened around, because "how it knew" appearing beside
+    // "what it concluded" is the whole deliverable — a regex that skipped it
+    // would keep passing if the label silently disappeared.
+    expect(output).toMatch(/title\.nonEmpty \[reasoned\] — title is 14 chars/);
   });
 });
 
@@ -91,7 +95,7 @@ describe("the fault-injection demo blocks at VERIFICATION, specifically", () => 
     // refuse it. When #66 added the output door, the sabotage was returning
     // `artifactId: undefined` and the demo silently started failing there
     // instead — still red, no longer demonstrating anything about verification.
-    expect(output).toMatch(/title\.nonEmpty — expected a non-empty title/);
+    expect(output).toMatch(/title\.nonEmpty \[reasoned\] — expected a non-empty title/);
     expect(output).not.toMatch(/capability\.completed/);
     expect(output).not.toMatch(/output does not match its declared outputs/);
     expect(output).not.toMatch(/input\.unresolvable/);
@@ -101,7 +105,11 @@ describe("the fault-injection demo blocks at VERIFICATION, specifically", () => 
     // artifact.intact passes: the sabotaged output really did store an
     // artifact. A demo where everything goes red proves less than one where
     // exactly the right thing does.
-    expect(output).toMatch(/artifact\.intact — artifact sha256:/);
+    // `[observed]`, and this line is where the two methods sit side by side in
+    // one trace: the check that FAILED reasoned over a returned string, the one
+    // that passed re-read bytes through a store that re-derives the address.
+    // Before #63 both rendered as a bare tick.
+    expect(output).toMatch(/artifact\.intact \[observed\] — artifact sha256:/);
     expect(output).toMatch(/fetch \(web\.fetch\) · passed/);
   });
 });
