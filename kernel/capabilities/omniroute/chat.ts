@@ -300,6 +300,9 @@ export const llmChat: Capability = {
  */
 export const llmChatSucceeded: Check = {
   id: "llm.chatSucceeded",
+  // The other half of the pair described on browser.navigateSucceeded: both
+  // read `ok`, neither is about `ok`.
+  appliesTo: { kind: "capabilities", ids: ["llm.chat"] },
   async run(output): Promise<CheckResult> {
     const result = output as Partial<LlmChatOutput> | undefined;
 

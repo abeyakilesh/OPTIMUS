@@ -256,6 +256,11 @@ export const browserNavigate: Capability = {
  */
 export const browserNavigateSucceeded: Check = {
   id: "browser.navigateSucceeded",
+  // NOT a field rule, and this is the pair that proves why both kinds exist:
+  // `llm.chat` also returns `ok` and `error`, so `{requires:["ok"]}` would
+  // make this check apply to it — true about the shape, false about the
+  // meaning. Navigation success is a fact about a browser, not about a field.
+  appliesTo: { kind: "capabilities", ids: ["browser.navigate"] },
   async run(output): Promise<CheckResult> {
     const result = output as Partial<BrowserNavigateOutput> | undefined;
 
