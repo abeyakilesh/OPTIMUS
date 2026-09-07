@@ -77,6 +77,14 @@ export const CAPABILITY_SELECTION: Readonly<
       "boundary rather than by a string test. The operator widening the root widens what a " +
       "compiled plan can read, and that is their decision to make knowingly",
   },
+  "github.resolve": {
+    selectable: true,
+    reason:
+      "net:read bounded to api.github.com, and it READS ONLY — THINK plane, data.read method " +
+      "(ADR-0016), so re-running it changes nothing outside. Its credential comes from the " +
+      "environment and there is deliberately no input field for a token: step input is written " +
+      "by a model and must never carry a secret",
+  },
   "repos.extract": {
     selectable: true,
     reason: "zero permissions; parses a stored document through the artifact store, like html.extractTitle",

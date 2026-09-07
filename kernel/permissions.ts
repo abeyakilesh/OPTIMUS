@@ -44,11 +44,25 @@ export class PermissionDenied extends Error {
 /** Fetches a URL. Injectable so tests never touch the real network. */
 export type Fetcher = (url: string) => Promise<string>;
 
+/**
+ * The same idea for the richer surface. `netRead` has been injectable since
+ * the beginning "so tests never touch the real network"; `netFetch` was not,
+ * which meant every capability using it — llm.chat, and now github.resolve —
+ * could only be tested against the live internet or not at all.
+ *
+ * That was an omission rather than a decision: a test that silently reaches
+ * GitHub passes or fails on someone else's rate limit, and #84 will make
+ * 244 such calls.
+ */
+export type NetFetcher = (request: NetFetchRequest) => Promise<NetFetchResult>;
+
 export interface BoundaryOptions {
   capabilityId: string;
   granted: readonly Permission[];
   store: ArtifactStore;
   fetcher?: Fetcher;
+  /** Injectable `netFetch`, for the same reason `fetcher` is. */
+  netFetcher?: NetFetcher;
   /** K4 blast radius. Omitted means DENY_ALL — fail closed, never open. */
   isolation?: Isolation;
 }
@@ -57,7 +71,7 @@ export interface BoundaryOptions {
  * Build the single context a capability is allowed to touch the world with.
  */
 export function createContext(options: BoundaryOptions): CapabilityContext {
-  const { capabilityId, granted, store, fetcher } = options;
+  const { capabilityId, granted, store, fetcher, netFetcher } = options;
   const isolation = options.isolation ?? DENY_ALL;
 
   const require = (permission: Permission): void => {
@@ -121,7 +135,10 @@ export function createContext(options: BoundaryOptions): CapabilityContext {
       const method = request.method ?? "GET";
       require(method === "GET" || method === "HEAD" ? "net:read" : "net:write");
       requireHostAllowed(capabilityId, isolation.allowedHosts, request.url);
-      return runFetch(request, method);
+      // The boundary is enforced BEFORE the injected implementation is
+      // consulted, so a test double cannot be handed a host the manifest
+      // never allowed — the check is the kernel's, not the fetcher's.
+      return (netFetcher ?? runFetch)(request, method as never);
     },
   };
 }
