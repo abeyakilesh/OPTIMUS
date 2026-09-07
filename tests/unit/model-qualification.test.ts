@@ -70,40 +70,48 @@ describe("an unqualified model is refused", () => {
   });
 });
 
-describe("the committed record is real", () => {
-  it("holds the two models that were actually run, at the OmniRoute endpoint the app uses", () => {
-    expect(qualifiedModelIds().sort()).toEqual(["ollama/llama3.2:latest", "ollama/qwen2.5:7b"]);
+describe("the committed record is honest about what has been measured", () => {
+  // #72 bumped the contract to v2 and the record was EMPTIED rather than
+  // carried forward. The previous entries certified llama3.2 and qwen2.5 on a
+  // ~40-token answer, which is not the task the compiler asks of them.
+  //
+  // They are NOT known to fail v2 — they are UNMEASURED against it, and the
+  // difference matters: the honest state is "nothing is qualified yet", not
+  // "these models were rejected". Re-running the probes needs a live
+  // OmniRoute, which CI does not have.
+
+  it("is written against the CURRENT contract version", () => {
+    expect(QUALIFICATION.contractVersion).toBe(CONTRACT_VERSION);
+  });
+
+  it("qualifies nobody until the v2 probes are actually run", () => {
+    // This is the deliberate, visible consequence. An empty record means the
+    // model layer is UNAVAILABLE and the route returns 503 — which is the
+    // correct answer to "has any model passed this contract?" today.
+    expect(qualifiedModelIds()).toEqual([]);
+    expect(isQualified("ollama/llama3.2:latest")).toBe(false);
+  });
+
+  it("was not quietly repopulated by hand", () => {
+    // The guard that makes the two above mean something. Every entry must
+    // carry a result for EVERY probe the contract defines, all passing — the
+    // shape `scripts/model-contract.ts --record` writes. A hand-added entry
+    // with two probes, or one with a failure, is refused here rather than
+    // being trusted because the file says the right words.
     for (const m of QUALIFICATION.models) {
-      expect(m.baseUrl).toBe("http://127.0.0.1:20128");
-      expect(m.probes.map((p) => p.id).sort()).toEqual(PROBES.map((p) => p.id).sort());
-      expect(m.probes.every((p) => p.passed)).toBe(true);
+      expect(m.probes.map((p) => p.id).sort(), m.id).toEqual(PROBES.map((p) => p.id).sort());
+      expect(m.probes.every((p) => p.passed), m.id).toBe(true);
+      expect(m.baseUrl, m.id).toBe("http://127.0.0.1:20128");
     }
   });
 
-  it("carries every probe the current contract defines — a new probe invalidates old entries", () => {
-    // If a probe is added without bumping CONTRACT_VERSION, existing entries
-    // would silently count as qualified against a contract they never faced.
-    for (const m of QUALIFICATION.models) {
-      expect(m.probes).toHaveLength(PROBES.length);
-    }
-  });
-
-  it("is currently fresh — and when this fails, that IS the re-qualification reminder", () => {
-    // This test has a deliberate expiry: it goes red maxAgeDays after the
-    // record was written. That is the intended behaviour, not a bug to work
-    // around, so the failure message says what to do instead of leaving
-    // someone guessing why an unrelated PR went red.
-    const v = qualificationOf("ollama/llama3.2:latest");
-    expect(
-      v.qualified,
-      v.qualified
-        ? ""
-        : `The committed qualification has expired or become invalid:\n  ${v.reason}\n` +
-          `Re-run it and commit the record:\n` +
-          `  npx tsx scripts/model-contract.ts ollama/llama3.2:latest http://127.0.0.1:20128 --record\n` +
-          `Do NOT edit kernel/models/qualified.json by hand to make this pass.`,
-    ).toBe(true);
-    expect(isQualified("ollama/llama3.2:latest")).toBe(true);
+  it("re-qualification is a documented command, not folklore", () => {
+    // When someone re-runs the probes and this file gains entries, the tests
+    // above start asserting them. Until then the path back is written down
+    // where the failure is read.
+    const record = JSON.stringify(QUALIFICATION);
+    expect(record).toMatch(/scripts\/model-contract\.ts/);
+    expect(record).toMatch(/do not hand-write entries here/i);
   });
 });
 
