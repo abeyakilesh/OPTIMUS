@@ -37,6 +37,7 @@ import {
 } from "./capabilities/scrapling-relocate";
 import { llmChat, llmChatSucceeded } from "./capabilities/omniroute/chat";
 import { browserNavigate, browserNavigateSucceeded } from "./capabilities/browser-use/navigate";
+import { fsReadFile, reposExtract, reposFound } from "./capabilities/tasklist";
 
 /**
  * Every capability the kernel knows how to run.
@@ -52,12 +53,17 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   scraplingRelocate,
   llmChat,
   browserNavigate,
+  // #84's first slice: read the task list off disk and parse it. Registered,
+  // and per this file's header that is NOT the same as AVAILABLE.
+  fsReadFile,
+  reposExtract,
 ];
 
 /** Every check. A capability's check must be registered or its steps cannot pass. */
 export const ALL_CHECKS: readonly Check[] = [
   titleNonEmpty,
   artifactIntact,
+  reposFound,
   relocateContractHonored,
   relocateFoundMatch,
   llmChatSucceeded,
