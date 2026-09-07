@@ -8,6 +8,7 @@ import { Harness } from "../../kernel/harness";
 import { Scheduler } from "../../kernel/scheduler";
 import { MemoryArtifactStore } from "../../kernel/artifacts";
 import { ALL_CHECKS, ALL_CAPABILITIES, buildBroker } from "../../kernel/registry";
+import { compilePlan } from "../../kernel/planCompiler";
 import { webFetch, htmlExtractTitle, titleNonEmpty, artifactIntact } from "../../kernel/builtin";
 import { browserNavigateSucceeded } from "../../kernel/capabilities/browser-use/navigate";
 import {
@@ -223,6 +224,39 @@ describe("the compiler offers only checks that can verify what it offered", () =
     const invented = stub("invented.always", { kind: "outputs", requires: ["bytes"] });
     expect(applicableCheckIds([webFetch.manifest], [invented])).toEqual(["invented.always"]);
     expect(applicableCheckIds([htmlExtractTitle.manifest], [invented])).toEqual([]);
+  });
+});
+
+describe("the compiler's allow-list and the broker must agree", () => {
+  it("refuses a plan naming a check the broker never registered", async () => {
+    // Review catch on #80. `validChecks` was built from the caller's raw
+    // `checkIds`, so an id nothing registered passed as available: the
+    // compiler returned ok:true and the SCHEDULER then threw `No such check`
+    // from inside a mission — exactly the "plausible plan that fails at
+    // runtime" the compiler exists to prevent.
+    const { broker } = kernel();
+    const result = await compilePlan({
+      objective: "x",
+      missionId: "m",
+      broker,
+      checkIds: ["artifact.intact", "ghost.check"], // ghost is registered nowhere
+      ask: async () =>
+        JSON.stringify({
+          steps: [
+            { id: "s", capabilityId: "web.fetch", input: { url: "https://example.com/" }, dependsOn: [], checks: ["ghost.check"] },
+          ],
+        }),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/not an available check/);
+  });
+
+  it("still compiles when the allow-list is a superset of what is registered", () => {
+    // The intersection must narrow, not fail: a caller passing every known id
+    // to a broker holding a subset is normal, not an error.
+    const { broker } = kernel();
+    expect(() => applicableCheckIds([webFetch.manifest], [...ALL_CHECKS])).not.toThrow();
+    expect(broker.hasCheck("relocate.foundMatch")).toBe(false);
   });
 });
 

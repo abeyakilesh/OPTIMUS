@@ -189,8 +189,9 @@ describe("the prompt describes what the broker will actually accept", () => {
     // capability, so the compiler could refuse an unregistered check and not an
     // inapplicable one. Then the first real compile against llama3.2:3b put
     // `browser.navigateSucceeded` on a `web.fetch` step, and a documented
-    // limit became an observed defect. See CHECK_APPLICABILITY; #71 is the
-    // version that moves it onto `Check` so hand-written plans get it too.
+    // limit became an observed defect. #71 CLOSED it: applicability is now
+    // declared on `Check` itself and enforced at the scheduler, so
+    // hand-written plans get the same refusal. See ADR-0011.
     const prompt = compilerInstructions(selectableCapabilities(buildBroker()), CHECKS);
     expect(prompt).not.toContain("browser.navigateSucceeded");
     expect(prompt).not.toContain("llm.chatSucceeded");
@@ -336,7 +337,7 @@ describe("the compiler refuses rather than producing a plausible plan", () => {
 
   it.each([
     ["no checks", { checks: [] }, /at least one check/],
-    ["an unregistered check", { checks: ["looks.fine"] }, /not a registered check/],
+    ["an unavailable check", { checks: ["looks.fine"] }, /not an available check/],
     ["a malformed id", { id: "a step" }, /id must be 1-64 chars/],
   ])("refuses a step with %s", async (_name, patch, pattern) => {
     const { broker } = kernel();

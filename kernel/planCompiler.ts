@@ -493,7 +493,16 @@ export async function compilePlan(options: CompileOptions): Promise<CompileResul
   }
 
   const allowed = new Set(manifests.map((m) => m.id));
-  const validChecks = new Set(checkIds);
+  // The OFFERED set, not the caller's raw list. Building this from `checkIds`
+  // let an id that no broker registered pass as "a registered check": the
+  // compiler returned ok:true, and the scheduler then threw `No such check`
+  // from inside a mission instead of the compiler refusing the plan.
+  //
+  // It also made the comment on `offered` above false — it claimed a plan
+  // naming a check outside the offered set is refused here, and nothing was
+  // comparing against that set. Caught in review on #80, which is the PR that
+  // introduced the gap while narrowing the offer list.
+  const validChecks = new Set(offered.map((c) => c.id));
   const steps: StepSpec[] = [];
 
   for (const [i, candidate] of body.steps.entries()) {
@@ -531,7 +540,10 @@ export async function compilePlan(options: CompileOptions): Promise<CompileResul
     }
     for (const c of s.checks) {
       if (typeof c !== "string" || !validChecks.has(c)) {
-        return refusal(`${at}.checks names "${String(c)}", which is not a registered check`);
+        // "not available" covers both ways it can be absent — unregistered in
+        // this broker, or registered but outside the caller's allow-list. The
+        // old wording said "not a registered check", which was one of the two.
+        return refusal(`${at}.checks names "${String(c)}", which is not an available check`);
       }
       // Registered is not APPLICABLE. Observed, not hypothetical: the first
       // real compile put `browser.navigateSucceeded` on a `web.fetch` step —
