@@ -24,7 +24,7 @@
  * assertion rule). "Returned a string" is not a pass.
  */
 
-import { parseStrictObject } from "../strictJson";
+import { parseStrictObject, wasFenced } from "../strictJson";
 
 export interface ProbeResult {
   id: string;
@@ -139,28 +139,47 @@ export const PROBES: readonly ContractProbe[] = [
   {
     id: "plan-shaped-json",
     why:
-      "The compiler asks for a NESTED, multi-field object of realistic size. `strict-json` " +
-      "asked for ~40 tokens and certified for a task it never exercised.",
-    // Deliberately shaped like a real plan: two steps, nested objects, an
-    // array, cross-references between steps. ~300+ characters of output.
+      "The compiler asks for a NESTED, multi-field object in ITS schema. `strict-json` asked for " +
+      "~40 tokens in a schema nothing consumes, and certified for a task it never exercised.",
+    // THE COMPILER'S ACTUAL SCHEMA, not a plausible-looking stand-in. Caught in
+    // review on #83: the first draft asked for {tool, needs} while the compiler
+    // requires {capabilityId, dependsOn, checks} over REGISTERED ids. A model
+    // could have passed that probe and still produced nothing compilePlan can
+    // consume — `probe-lenient-where-consumer-is-strict` inside the very PR
+    // that named the class.
     //
-    // Measured on llama3.2:3b: 7/10 compiled with a worked example in the
-    // prompt, 0/6 without one — so a worked example is included here, because
-    // the probe must resemble the CONSUMER, not be harder than it.
+    // The ids below are the real ones the walking skeleton uses, so passing
+    // this probe means producing a plan the compiler would actually accept.
+    //
+    // A worked example is included on purpose: measured 7/10 with one and 0/6
+    // without, because without it the model invented a literal artifactId
+    // instead of a $from reference. A probe must resemble its consumer, and
+    // being HARDER than the consumer is the same defect reversed.
     prompt:
       "Return ONLY one valid JSON object. No prose before or after it, no markdown fence, " +
       "and nothing at all following the closing brace.\n\n" +
-      'Shape, exactly: {"steps":[{"id":"<string>","tool":"<string>",' +
-      '"input":{"url":"<string>"},"needs":["<id of an earlier step>"]}]}\n\n' +
-      'Worked example for "download a page and count its words":\n' +
-      '{"steps":[{"id":"get","tool":"http.get","input":{"url":"https://example.com/"},"needs":[]},' +
-      '{"id":"count","tool":"text.wordCount","input":{"url":"https://example.com/"},"needs":["get"]}]}\n\n' +
-      'Now produce the same shape for: "fetch https://example.org/ and extract its title", ' +
-      'using the tools http.get and html.title.',
+      "Capabilities you may name, and nothing else:\n" +
+      "  web.fetch — input {url}, returns {artifactId, bytes}\n" +
+      "  html.extractTitle — input {artifactId}, returns {title, artifactId}\n" +
+      "Check ids you may name: artifact.intact, title.nonEmpty\n\n" +
+      'Shape, exactly: {"steps":[{"id":"<string>","capabilityId":"<capability>",' +
+      '"input":{...},"dependsOn":["<earlier step id>"],"checks":["<check id>"]}]}\n\n' +
+      'A later step uses an earlier step\'s output by reference: {"$from":"<stepId>.<field>"}\n\n' +
+      'Worked example for "fetch https://example.com/ and extract its title":\n' +
+      '{"steps":[{"id":"fetch","capabilityId":"web.fetch","input":{"url":"https://example.com/"},' +
+      '"dependsOn":[],"checks":["artifact.intact"]},' +
+      '{"id":"extract","capabilityId":"html.extractTitle",' +
+      '"input":{"artifactId":{"$from":"fetch.artifactId"}},"dependsOn":["fetch"],' +
+      '"checks":["title.nonEmpty"]}]}\n\n' +
+      'Now produce the same shape for: "fetch https://example.org/ and extract its title".',
     grade(output) {
-      // THE SAME READING THE COMPILER USES. Not a looser one — that is the
-      // whole defect #72 names. A fence, or one byte after the closing brace,
-      // fails here exactly as it fails there.
+      // The compiler's own reading of trailing text and JSON shape. Fences are
+      // graded separately below, because the compiler unfences and accepts one
+      // while this probe's prompt forbade it — a deliberate difference, not an
+      // accidental one (see kernel/strictJson.ts).
+      if (wasFenced(output)) {
+        return { passed: false, reason: "wrapped the JSON in a markdown fence despite being told not to" };
+      }
       const parsed = parseStrictObject(output);
       if (!parsed.ok) return { passed: false, reason: parsed.reason };
 
@@ -168,41 +187,59 @@ export const PROBES: readonly ContractProbe[] = [
       if (!Array.isArray(steps) || steps.length < 2) {
         return { passed: false, reason: `expected at least 2 steps, got ${JSON.stringify(steps)?.slice(0, 120)}` };
       }
+      const CAPS = new Set(["web.fetch", "html.extractTitle"]);
+      const CHECKS = new Set(["artifact.intact", "title.nonEmpty"]);
       const ids: string[] = [];
       for (const [i, raw] of steps.entries()) {
         if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
           return { passed: false, reason: `steps[${i}] is not an object` };
         }
         const st = raw as Record<string, unknown>;
-        for (const key of ["id", "tool", "input", "needs"]) {
+        for (const key of ["id", "capabilityId", "input", "dependsOn", "checks"]) {
           if (!(key in st)) return { passed: false, reason: `steps[${i}] is missing "${key}"` };
         }
         if (typeof st.id !== "string" || st.id.length === 0) {
           return { passed: false, reason: `steps[${i}].id is not a non-empty string` };
         }
-        if (typeof st.tool !== "string") return { passed: false, reason: `steps[${i}].tool is not a string` };
+        if (typeof st.capabilityId !== "string" || !CAPS.has(st.capabilityId)) {
+          return { passed: false, reason: `steps[${i}].capabilityId "${String(st.capabilityId)}" is not one it was offered` };
+        }
         if (typeof st.input !== "object" || st.input === null || Array.isArray(st.input)) {
           return { passed: false, reason: `steps[${i}].input is not an object` };
         }
-        if (!Array.isArray(st.needs)) return { passed: false, reason: `steps[${i}].needs is not an array` };
+        if (!Array.isArray(st.dependsOn)) return { passed: false, reason: `steps[${i}].dependsOn is not an array` };
+        // The compiler refuses a step with no checks: a step is done only when
+        // a check passes. A probe that let it through would certify a model
+        // for plans the compiler rejects on its first validation pass.
+        if (!Array.isArray(st.checks) || st.checks.length === 0) {
+          return { passed: false, reason: `steps[${i}].checks must name at least one check` };
+        }
+        for (const c of st.checks) {
+          if (typeof c !== "string" || !CHECKS.has(c)) {
+            return { passed: false, reason: `steps[${i}].checks names "${String(c)}", which was not offered` };
+          }
+        }
         ids.push(st.id);
       }
-      // MEANING, not shape. A model that emits two well-formed steps which do
-      // not refer to each other has produced a shape, not a plan — and the
-      // dependency edge is the thing the compiler actually needs.
+      // MEANING, not shape. Two well-formed steps that do not refer to each
+      // other are a shape, not a plan — and the edge is what the compiler needs.
       const second = steps[1] as Record<string, unknown>;
-      const needs = (second.needs as unknown[]).filter((n): n is string => typeof n === "string");
-      if (!needs.some((n) => n === ids[0])) {
+      const dependsOn = (second.dependsOn as unknown[]).filter((n): n is string => typeof n === "string");
+      if (!dependsOn.includes(ids[0])) {
         return {
           passed: false,
-          reason: `steps[1] does not depend on steps[0] ("${ids[0]}"); got needs=${JSON.stringify(second.needs)}`,
+          reason: `steps[1] does not depend on steps[0] ("${ids[0]}"); got dependsOn=${JSON.stringify(second.dependsOn)}`,
         };
       }
-      const tools = steps.map((st) => (st as Record<string, unknown>).tool);
-      if (!tools.includes("http.get") || !tools.includes("html.title")) {
-        return { passed: false, reason: `asked for http.get and html.title, got ${JSON.stringify(tools)}` };
+      // The $from reference is the part measured at 0/6 without a worked
+      // example — the model invented a literal artifactId instead.
+      if (!JSON.stringify(second.input ?? {}).includes("$from")) {
+        return {
+          passed: false,
+          reason: `steps[1].input does not reference the earlier step: ${JSON.stringify(second.input)?.slice(0, 120)}`,
+        };
       }
-      return { passed: true, reason: `${steps.length} linked steps, nothing trailing` };
+      return { passed: true, reason: `${steps.length} linked steps in the compiler's schema, nothing trailing` };
     },
   },
   {

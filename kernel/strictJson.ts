@@ -84,13 +84,21 @@ export type StrictParse =
  * happened.
  */
 export function parseStrictObject(raw: string): StrictParse {
+  // FENCE POLICY IS THE CALLER'S, and putting it here was a real mistake in
+  // the first draft — caught in review on #83.
+  //
+  // The compiler UNFENCES and accepts: `tests/kernel/plan-compiler.test.ts`
+  // has "accepts a fenced plan — the model contract grades fences, this must
+  // survive one". The contract PENALISES a fence, because its prompt forbade
+  // one and obeying instructions is what that probe measures.
+  //
+  // Both are right, and the difference is deliberate. Baking rejection in here
+  // made the probe stricter than its consumer — the same defect this module
+  // exists to prevent, pointed the other way: a backend that fences only long
+  // responses would fail qualification for behaviour the compiler tolerates.
+  //
+  // So this function is fence-NEUTRAL. Callers that care ask `wasFenced`.
   const body = unfence(raw);
-
-  if (wasFenced(raw)) {
-    // A fence is a real failure when the instruction forbade one: a caller
-    // doing JSON.parse on the raw output gets an error, and the model was told.
-    return { ok: false, reason: "wrapped the JSON in a markdown fence despite being told not to" };
-  }
 
   const trailing = trailingAfterFirstObject(body);
   if (trailing !== undefined) {

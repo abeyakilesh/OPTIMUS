@@ -24,8 +24,14 @@ const probe = (id: string) => {
 /** A well-formed answer to `plan-shaped-json`, used as the control. */
 const GOOD_PLAN = JSON.stringify({
   steps: [
-    { id: "get", tool: "http.get", input: { url: "https://example.org/" }, needs: [] },
-    { id: "title", tool: "html.title", input: { url: "https://example.org/" }, needs: ["get"] },
+    { id: "fetch", capabilityId: "web.fetch", input: { url: "https://example.org/" }, dependsOn: [], checks: ["artifact.intact"] },
+    {
+      id: "extract",
+      capabilityId: "html.extractTitle",
+      input: { artifactId: { $from: "fetch.artifactId" } },
+      dependsOn: ["fetch"],
+      checks: ["title.nonEmpty"],
+    },
   ],
 });
 
@@ -64,13 +70,53 @@ describe("plan-shaped-json exercises the size of task it certifies for", () => {
     expect(r.reason).toMatch(/fence/);
   });
 
+  it("REJECTS a step with no checks, because the compiler does", () => {
+    // Review catch on #83: the probe must enforce what the consumer enforces.
+    // A step with no checks can never be done, and the compiler refuses it on
+    // its first validation pass.
+    const noChecks = JSON.stringify({
+      steps: [
+        { id: "fetch", capabilityId: "web.fetch", input: { url: "https://example.org/" }, dependsOn: [], checks: [] },
+        { id: "extract", capabilityId: "html.extractTitle", input: { artifactId: { $from: "fetch.artifactId" } }, dependsOn: ["fetch"], checks: ["title.nonEmpty"] },
+      ],
+    });
+    const r = probe("plan-shaped-json").grade(noChecks);
+    expect(r.passed).toBe(false);
+    expect(r.reason).toMatch(/at least one check/);
+  });
+
+  it("REJECTS a plan in the COMPILER'S schema but with a literal instead of a $from", () => {
+    // Measured 0/6 without a worked example: the model invented a literal
+    // artifactId rather than referencing the earlier step.
+    const literal = JSON.stringify({
+      steps: [
+        { id: "fetch", capabilityId: "web.fetch", input: { url: "https://example.org/" }, dependsOn: [], checks: ["artifact.intact"] },
+        { id: "extract", capabilityId: "html.extractTitle", input: { artifactId: "sha256:" + "a".repeat(64) }, dependsOn: ["fetch"], checks: ["title.nonEmpty"] },
+      ],
+    });
+    const r = probe("plan-shaped-json").grade(literal);
+    expect(r.passed).toBe(false);
+    expect(r.reason).toMatch(/does not reference the earlier step/);
+  });
+
+  it("asks for the COMPILER'S schema, not a plausible-looking stand-in", () => {
+    // The first draft asked for {tool, needs}; the compiler requires
+    // {capabilityId, dependsOn, checks}. A model could have passed and still
+    // produced nothing compilePlan can consume.
+    const p = probe("plan-shaped-json");
+    for (const key of ["capabilityId", "dependsOn", "checks", "$from"]) {
+      expect(p.prompt, key).toContain(key);
+    }
+    expect(p.prompt).not.toContain('"needs"');
+  });
+
   it("REJECTS two steps that do not depend on each other — a shape, not a plan", () => {
     // Meaning over shape. Well-formed, complete, and useless: the edge is the
     // thing the compiler actually needs.
     const unlinked = JSON.stringify({
       steps: [
-        { id: "get", tool: "http.get", input: { url: "https://example.org/" }, needs: [] },
-        { id: "title", tool: "html.title", input: { url: "https://example.org/" }, needs: [] },
+        { id: "fetch", capabilityId: "web.fetch", input: { url: "https://example.org/" }, dependsOn: [], checks: ["artifact.intact"] },
+        { id: "extract", capabilityId: "html.extractTitle", input: { artifactId: "sha256:x" }, dependsOn: [], checks: ["title.nonEmpty"] },
       ],
     });
     const r = probe("plan-shaped-json").grade(unlinked);
@@ -80,7 +126,7 @@ describe("plan-shaped-json exercises the size of task it certifies for", () => {
 
   it("REJECTS a single step — the ~40-token answer the old probe accepted", () => {
     const tiny = JSON.stringify({
-      steps: [{ id: "get", tool: "http.get", input: { url: "https://example.org/" }, needs: [] }],
+      steps: [{ id: "fetch", capabilityId: "web.fetch", input: { url: "https://example.org/" }, dependsOn: [], checks: ["artifact.intact"] }],
     });
     expect(probe("plan-shaped-json").grade(tiny).passed).toBe(false);
   });
@@ -88,13 +134,13 @@ describe("plan-shaped-json exercises the size of task it certifies for", () => {
   it("REJECTS the wrong tools, however well-formed", () => {
     const wrong = JSON.stringify({
       steps: [
-        { id: "a", tool: "shell.exec", input: { url: "https://example.org/" }, needs: [] },
-        { id: "b", tool: "shell.exec", input: { url: "https://example.org/" }, needs: ["a"] },
+        { id: "a", capabilityId: "shell.exec", input: {}, dependsOn: [], checks: ["artifact.intact"] },
+        { id: "b", capabilityId: "shell.exec", input: {}, dependsOn: ["a"], checks: ["artifact.intact"] },
       ],
     });
     const r = probe("plan-shaped-json").grade(wrong);
     expect(r.passed).toBe(false);
-    expect(r.reason).toMatch(/http\.get and html\.title/);
+    expect(r.reason).toMatch(/is not one it was offered/);
   });
 
   it("asks for a genuinely plan-sized answer, not a token one", () => {
