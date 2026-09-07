@@ -25,9 +25,10 @@
  */
 
 import type { Broker } from "./broker";
-import type { CapabilityManifest, MissionSpec, StepSpec } from "./types";
+import type { CapabilityManifest, Check, MissionSpec, StepSpec } from "./types";
 import { validateGraph } from "./scheduler";
 import { validateReferences } from "./references";
+import { applicableCheckIds, checkAppliesTo, describeApplicability } from "./checkContract";
 import { REFERENCE_KEY, holdsReferenceKey } from "./references";
 import { checkInput } from "./inputContract";
 
@@ -93,7 +94,8 @@ export const CAPABILITY_SELECTION: Readonly<
 };
 
 /**
- * Which capability each registered check can actually verify.
+ * Which capability each registered check can actually verify — now READ FROM
+ * THE CHECKS, not maintained here.
  *
  * NOT hypothetical. The first real compile against llama3.2:3b produced a
  * `web.fetch` step carrying `checks: ["browser.navigateSucceeded"]` — a plan
@@ -101,36 +103,24 @@ export const CAPABILITY_SELECTION: Readonly<
  * `output.text` on a capability returning `{ artifactId, bytes }`. Offering a
  * model a check it has no legitimate use for is offering it a mistake.
  *
- * A `Check` carries only an id and a `run`, so nothing in the kernel links the
- * two — that is #71, and the real fix is a declaration on `Check` itself, which
- * the broker can then enforce for hand-written plans too. This record is the
- * compiler's half of it: same shape as CAPABILITY_SELECTION, same exhaustiveness
- * test, and it moves into `Check` when #71 lands.
+ * THIS USED TO BE A HARDCODED `CHECK_APPLICABILITY` MAP, and it said so: "the
+ * real fix is a declaration on `Check` itself... it moves into `Check` when
+ * #71 lands". #71 landed. The map is deleted rather than left beside the
+ * declaration, because two copies of one fact is `stale-duplicate` and the map
+ * was already wrong — it listed `title.nonEmpty` against `html.extractTitle`
+ * only, while the check reads `output.title` and `browser.navigate` returns
+ * one too.
  *
- * Deliberately NOT derived from the id. `browser.navigateSucceeded` begins with
- * `browser.navigate` and `relocate.foundMatch` begins with neither — inferring
- * the link from a name is `name-over-capability`, and the near-miss already bit
- * once in this PR's own tests (`substring-vs-token-match`).
+ * The kernel now enforces the same rule for HAND-WRITTEN plans, which a
+ * compiler-local map never could — see `validatePlanChecks`.
  */
-export const CHECK_APPLICABILITY: Readonly<Record<string, readonly string[]>> = {
-  "title.nonEmpty": ["html.extractTitle"],
-  // Anything that returns an artifactId. Listed rather than derived, because
-  // "declares an artifactId output" is the rule #71 should encode and this is
-  // the compiler's stand-in for it.
-  "artifact.intact": ["web.fetch", "html.extractTitle", "scrapling.relocate", "browser.navigate", "llm.chat"],
-  "relocate.contractHonored": ["scrapling.relocate"],
-  "relocate.foundMatch": ["scrapling.relocate"],
-  "llm.chatSucceeded": ["llm.chat"],
-  "browser.navigateSucceeded": ["browser.navigate"],
-};
 
 /** The checks a plan may legally pair with these capabilities. */
 export function applicableChecks(
   manifests: readonly CapabilityManifest[],
-  checkIds: readonly string[],
+  checks: readonly Check[],
 ): string[] {
-  const ids = new Set(manifests.map((m) => m.id));
-  return checkIds.filter((c) => (CHECK_APPLICABILITY[c] ?? []).some((cap) => ids.has(cap)));
+  return applicableCheckIds(manifests, checks);
 }
 
 export interface SelectionVerdict {
@@ -197,11 +187,11 @@ function describeConstraint(name: string, c: Record<string, unknown>): string {
  */
 export function describeCapabilities(
   manifests: readonly CapabilityManifest[],
-  checkIds: readonly string[] = [],
+  allChecks: readonly Check[] = [],
 ): string {
   return manifests
     .map((m) => {
-      const checks = checkIds.filter((c) => (CHECK_APPLICABILITY[c] ?? []).includes(m.id));
+      const checks = allChecks.filter((c) => checkAppliesTo(c.appliesTo, m)).map((c) => c.id);
       const inputs = Object.entries(m.inputConstraints).map(([k, v]) =>
         describeConstraint(k, v as unknown as Record<string, unknown>),
       );
@@ -232,14 +222,14 @@ export function describeCapabilities(
  */
 export function compilerInstructions(
   manifests: readonly CapabilityManifest[],
-  allCheckIds: readonly string[],
+  allChecks: readonly Check[],
 ): string {
-  const checkIds = applicableChecks(manifests, allCheckIds);
+  const checkIds = applicableChecks(manifests, allChecks);
   return [
     "You compile an objective into a mission plan. Return ONLY valid JSON, no prose, no markdown fence.",
     "",
     "Available capabilities — you may name NO others:",
-    describeCapabilities(manifests, checkIds),
+    describeCapabilities(manifests, allChecks),
     "",
     `Available check ids — every step must name at least one, and only ones listed for its ` +
       `capability: ${JSON.stringify(checkIds)}`,
@@ -346,6 +336,17 @@ function literalInputViolations(broker: Broker, capabilityId: string, input: unk
     return value;
   };
 
+  // An unregistered capability is REPORTED, not thrown. The membership guard
+  // above normally catches it first, but "normally" is not a guarantee: its
+  // own mutation test deliberately removes that guard, and this function then
+  // asked the broker for a manifest that does not exist and crashed the
+  // compile. A refusal is the contract here — every other path returns
+  // violations — so throwing made the compiler's honesty depend on a guard
+  // somewhere else still being present.
+  if (!broker.has(capabilityId)) {
+    return [`input: capability "${capabilityId}" is not registered, so its input cannot be checked`];
+  }
+
   const literal = strip(input ?? {}, "input");
   const excused = new Set(stripped.map((at) => `${at}: required field is missing`));
   return checkInput(broker.manifest(capabilityId).inputConstraints, literal).filter(
@@ -423,9 +424,21 @@ export async function compilePlan(options: CompileOptions): Promise<CompileResul
     return refusal("no capability is selectable, so no plan can be compiled");
   }
 
+  // Ids in, checks out. `checkIds` stays the public parameter (D5: the set is
+  // passed in, never reached for globally); the broker resolves each to the
+  // object carrying its `appliesTo`.
+  //
+  // INTERSECTION, not validation. `checkIds` is an allow-list from the caller
+  // and the broker is the authority on what exists — an id in the allow-list
+  // that nothing registered is simply not available, exactly as an unselectable
+  // capability is. Nothing is weakened by dropping it: a plan naming a check
+  // outside the offered set is refused below, and the scheduler refuses an
+  // inapplicable pairing again before the mission runs.
+  const offered: Check[] = checkIds.filter((id) => broker.hasCheck(id)).map((id) => broker.check(id));
+
   let raw: string;
   try {
-    raw = await ask({ instructions: compilerInstructions(manifests, checkIds), objective });
+    raw = await ask({ instructions: compilerInstructions(manifests, offered), objective });
   } catch (error) {
     return refusal(`the model layer did not answer: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -480,7 +493,16 @@ export async function compilePlan(options: CompileOptions): Promise<CompileResul
   }
 
   const allowed = new Set(manifests.map((m) => m.id));
-  const validChecks = new Set(checkIds);
+  // The OFFERED set, not the caller's raw list. Building this from `checkIds`
+  // let an id that no broker registered pass as "a registered check": the
+  // compiler returned ok:true, and the scheduler then threw `No such check`
+  // from inside a mission instead of the compiler refusing the plan.
+  //
+  // It also made the comment on `offered` above false — it claimed a plan
+  // naming a check outside the offered set is refused here, and nothing was
+  // comparing against that set. Caught in review on #80, which is the PR that
+  // introduced the gap while narrowing the offer list.
+  const validChecks = new Set(offered.map((c) => c.id));
   const steps: StepSpec[] = [];
 
   for (const [i, candidate] of body.steps.entries()) {
@@ -518,16 +540,25 @@ export async function compilePlan(options: CompileOptions): Promise<CompileResul
     }
     for (const c of s.checks) {
       if (typeof c !== "string" || !validChecks.has(c)) {
-        return refusal(`${at}.checks names "${String(c)}", which is not a registered check`);
+        // "not available" covers both ways it can be absent — unregistered in
+        // this broker, or registered but outside the caller's allow-list. The
+        // old wording said "not a registered check", which was one of the two.
+        return refusal(`${at}.checks names "${String(c)}", which is not an available check`);
       }
       // Registered is not APPLICABLE. Observed, not hypothetical: the first
       // real compile put `browser.navigateSucceeded` on a `web.fetch` step —
       // a plan that validates and is guaranteed red.
-      const appliesTo = CHECK_APPLICABILITY[c] ?? [];
-      if (!appliesTo.includes(s.capabilityId)) {
+      // Applicability needs BOTH sides registered. When either is missing its
+      // own dedicated guard reports it — and the mutation suite deliberately
+      // removes one of those guards, so this must not throw in its place and
+      // steal the failure the mutation exists to demonstrate.
+      if (!broker.hasCheck(c) || !broker.has(s.capabilityId)) continue;
+      const applies = broker.check(c).appliesTo;
+      if (!checkAppliesTo(applies, broker.manifest(s.capabilityId))) {
         return refusal(
-          `${at}.checks names "${c}", which verifies ${appliesTo.length ? appliesTo.join(", ") : "nothing"} ` +
-            `— not ${s.capabilityId}. A plan that pairs a check with a capability it cannot read is red before it runs`,
+          `${at}.checks names "${c}", which verifies ${describeApplicability(applies)} — not ` +
+            `${s.capabilityId}. A plan that pairs a check with a capability it cannot read is ` +
+            `red before it runs`,
         );
       }
     }

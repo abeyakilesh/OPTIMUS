@@ -11,6 +11,7 @@ import type { Budget, Capability, CapabilityManifest, Check } from "./types";
 import type { Isolation } from "./sandbox";
 import { assertConstraints, checkInput } from "./inputContract";
 import { assertOutputs, assertOutputTrust, checkOutput } from "./outputContract";
+import { assertApplicability } from "./checkContract";
 
 export class BrokerError extends Error {}
 
@@ -147,13 +148,32 @@ export class Broker {
     if (this.checks.has(check.id)) {
       throw new BrokerError(`Check already registered: ${check.id}`);
     }
+    // #71, at the door. A malformed applicability declaration must never
+    // reach a plan, for the same reason a malformed inputConstraint must not:
+    // it would read as a boundary and match nothing.
+    if (check.appliesTo === undefined) {
+      throw new BrokerError(
+        `${check.id}: check declares no appliesTo. Say which capabilities it can verify — ` +
+          `{ kind: "outputs", requires: [...] } or { kind: "capabilities", ids: [...] }`,
+      );
+    }
+    assertApplicability(check.appliesTo, check.id);
     this.checks.set(check.id, check);
+  }
+
+  /** Everything registered, for the compiler's prompt and the exhaustiveness tests. */
+  allChecks(): Check[] {
+    return [...this.checks.values()];
   }
 
   capability(id: string): Capability {
     const found = this.capabilities.get(id);
     if (!found) throw new BrokerError(`No such capability: ${id}`);
     return found;
+  }
+
+  hasCheck(id: string): boolean {
+    return this.checks.has(id);
   }
 
   check(id: string): Check {

@@ -51,6 +51,7 @@ class Timeline {
 
 const alwaysPasses: Check = {
   id: "always.passes",
+  appliesTo: { kind: "outputs", requires: [] },
   async run() {
     return { checkId: "always.passes", passed: true, reason: "ok" };
   },
@@ -58,6 +59,7 @@ const alwaysPasses: Check = {
 
 const alwaysFails: Check = {
   id: "always.fails",
+  appliesTo: { kind: "outputs", requires: [] },
   async run() {
     return { checkId: "always.fails", passed: false, reason: "designed to fail" };
   },
@@ -316,6 +318,7 @@ describe("multi-agent orchestration", () => {
     broker.register(needsRepair);
     broker.registerCheck({
       id: "title.nonEmpty",
+      appliesTo: { kind: "outputs", requires: ["title"] },
       async run(output) {
         const title = (output as { title?: string }).title;
         return {
