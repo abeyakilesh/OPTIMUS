@@ -36,9 +36,16 @@ So this registry has three hard rules:
 | WP-003 | Extraction + schema verification (absorb Scrapling) | P0 | ⏸ Blocked by WP-001 | — | — |
 | WP-004 | Model layer (bundle OmniRoute) | P0 | ⏸ Blocked by WP-001 | — | — |
 | WP-005 | Mission Control surface | P1 | ⏸ Blocked by WP-002/3 | — | — |
+| WP-006 | Remote control plane (multi-device) | P2 | ⏸ Blocked by WP-005 | — | — |
 
-Nothing beyond WP-005 is planned on purpose. The 17 pages, the other 58 repos
+Nothing beyond WP-006 is planned on purpose. The 17 pages, the other 58 repos
 and every Tier-3 surface stay out of this table until the wedge works.
+
+WP-006 is listed rather than built, and the distinction matters: its SHAPE is
+recorded in `CLAUDE.md` ("THE CONTROL PLANE") so it is not invented differently
+under time pressure later. Every row of that design starts from something the
+kernel already does — if it ever needs a kernel change the kernel would not
+otherwise want, it is being built too early.
 
 ---
 
@@ -130,6 +137,28 @@ Already partly proven: it fronts gate 4 in CI today.
 
 The first real surface. Only starts once a mission demonstrably runs and
 verifies without it.
+
+## WP-006 · Remote control plane
+
+Watching, pausing, steering and approving a mission from a phone, tablet or
+second machine. Long missions do not wait for someone to be at the desk.
+
+**Not a second architecture.** `state is a fold of the log`, so any device
+rebuilds the same state by replaying events; a mission is a pull request, so
+the remote view is the PR view; pause/resume are budget and scheduler
+operations that already exist. Adaptive layouts per screen, never separate
+logic — the moment a mobile client holds logic the desktop does not, a mission
+has two definitions.
+
+**The load-bearing constraint:** remote commanding is remote code execution
+wearing a friendly UI. A device is not an authority — a command is `operator`
+intent after authentication, and K2 decides what it may do. Read and write
+split, new devices read-only by default.
+
+Design recorded in `CLAUDE.md` → THE CONTROL PLANE. Blocked behind WP-005,
+which is itself blocked behind a mission that runs and verifies with no surface
+at all — the Atlas mistake was building Mission Control before the kernel
+worked.
 
 ---
 
