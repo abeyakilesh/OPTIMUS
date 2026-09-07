@@ -61,6 +61,7 @@ function capability(over: Partial<CapabilityManifest>, output: unknown): Capabil
 
 const alwaysPasses: Check = {
   id: "always.passes",
+  appliesTo: { kind: "outputs", requires: [] },
   async run() {
     return { checkId: "always.passes", passed: true, reason: "by construction" };
   },
@@ -192,6 +193,7 @@ describe("the output door refuses what the manifest did not promise", () => {
     broker.register(capability({ outputs: { title: { kind: "string", required: true } } }, { title: 42 }));
     broker.registerCheck({
       id: "never.passes",
+      appliesTo: { kind: "outputs", requires: [] },
       async run() {
         return { checkId: "never.passes", passed: false, reason: "the mission's question" };
       },

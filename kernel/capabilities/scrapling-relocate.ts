@@ -166,6 +166,10 @@ export const scraplingRelocate: Capability = {
  */
 export const relocateContractHonored: Check = {
   id: "relocate.contractHonored",
+  // Capability-scoped, not field-scoped: this verifies the PARENT's contract
+  // (Scrapling 0.4.9's relocate semantics), which is a statement about one
+  // implementation rather than about any output carrying `found`/`score`.
+  appliesTo: { kind: "capabilities", ids: ["scrapling.relocate"] },
   async run(output): Promise<CheckResult> {
     const result = output as Partial<RelocateOutput> | undefined;
 
@@ -258,6 +262,7 @@ export const MAX_RELAXATION = 15;
  */
 export const relocateFoundMatch: Check = {
   id: "relocate.foundMatch",
+  appliesTo: { kind: "capabilities", ids: ["scrapling.relocate"] },
   async run(output): Promise<CheckResult> {
     const r = output as Partial<RelocateOutput> | undefined;
     if (!r || typeof r.found !== "boolean" || typeof r.score !== "number") {

@@ -40,6 +40,7 @@ const repeater: Capability = {
 
 const passes: Check = {
   id: "always.passes",
+  appliesTo: { kind: "outputs", requires: [] },
   async run() {
     return { checkId: "always.passes", passed: true, reason: "ok" };
   },
@@ -193,6 +194,7 @@ describe("evidence records what a step produced, not only what it newly wrote", 
   it("records produced artifacts even when the step FAILS its checks", async () => {
     const fails: Check = {
       id: "always.fails",
+      appliesTo: { kind: "outputs", requires: [] },
       async run() {
         return { checkId: "always.fails", passed: false, reason: "red on purpose" };
       },

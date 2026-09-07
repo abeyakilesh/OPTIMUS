@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **82 classes · 69 with a real detection mechanism · 13 UNDETECTED**
+> **83 classes · 70 with a real detection mechanism · 13 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -810,6 +810,19 @@ The #68 instances add a second, sharper reason, worth stating on its own: **an a
 **Detection:** `kernel/outputContract.ts` :: `assertOutputTrust` forces a per-field level on every declared output, so the classification is a decision the manifest author makes rather than an inference from the permission list. **UNDETECTED for correctness** — nothing verifies that a declared level is *true*, and a manifest calling `html.extractTitle.title` `capability` would register cleanly. That is the weakest joint in the mechanism and it is stated at the declaration site.
 
 ---
+
+### `stand-in-map-outlives-its-note`
+
+**Looks like:** A hardcoded table stands in for a rule that belongs somewhere else. It carries an honest comment saying so — "this moves when #NN lands" — and the comment is the only thing keeping the two in step. The table drifts from the code it mirrors, and the drift is invisible because the table IS the source anyone consults.
+
+**Instances:** #71 — `planCompiler.ts` held `CHECK_APPLICABILITY`, a record of which capability each check verifies, with a note reading *"the real fix is a declaration on `Check` itself... it moves into `Check` when #71 lands."* It was already wrong when written: it listed `title.nonEmpty` against `html.extractTitle` only, while the check reads `output.title` and `browser.navigate` returns one too. Nothing compared the map to the checks, so a narrower-than-reality entry looked exactly like a correct one. The map also could not constrain HAND-WRITTEN plans at all — only the compiler's own output — so the guarantee it appeared to provide had a hole the size of the public API.
+
+**Why it survived:** The note made it feel provisional and therefore harmless, and provisional things are not audited. It also worked for the case that motivated it, which is the strongest possible disguise: the observed defect (a model pairing `browser.navigateSucceeded` with `web.fetch`) was genuinely caught. A stand-in that catches the bug you filed it for reads as finished.
+
+**Detection:** `kernel/checkContract.ts` :: `checkAppliesTo` is the single source, read by the compiler's prompt, the plan validator and the tests alike; `tests/kernel/check-applicability.test.ts` :: *every registered check declares applicability, and applies to at least one registered capability*; mutation — inverting the field rule makes `artifact.intact` stop matching. The map is deleted rather than left beside the declaration, because two copies of one fact is `stale-duplicate` regardless of which is authoritative.
+
+**Rule:** A stand-in for a rule that belongs elsewhere is deleted by the PR that moves it, not kept alongside.
+
 
 ## F · Failures that misreport themselves
 
