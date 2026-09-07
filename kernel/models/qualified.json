@@ -1,51 +1,7 @@
 {
-  "$comment": "Written by `npx tsx scripts/model-contract.ts <model> [baseUrl] --record`. Hand-editing this to add a model is the same defect as marking a capability AVAILABLE without proof (Directive #4) — the probes are cheap, run them.",
-  "contractVersion": 1,
+  "$comment": "Written by `npx tsx scripts/model-contract.ts <model> [baseUrl] --record`. Hand-editing this to add a model is the same defect as marking a capability AVAILABLE without proof (Directive #4) \u2014 the probes are cheap, run them.",
+  "contractVersion": 2,
   "maxAgeDays": 30,
-  "models": [
-    {
-      "id": "ollama/llama3.2:latest",
-      "baseUrl": "http://127.0.0.1:20128",
-      "qualifiedAt": "2026-08-25T14:36:36.897Z",
-      "probes": [
-        {
-          "id": "strict-json",
-          "passed": true,
-          "reason": "clean JSON: Tokyo, Japan"
-        },
-        {
-          "id": "exact-format",
-          "passed": true,
-          "reason": "one lowercase word, correct"
-        },
-        {
-          "id": "refuses-to-fabricate",
-          "passed": true,
-          "reason": "declined to invent"
-        }
-      ]
-    },
-    {
-      "id": "ollama/qwen2.5:7b",
-      "baseUrl": "http://127.0.0.1:20128",
-      "qualifiedAt": "2026-08-25T14:37:11.251Z",
-      "probes": [
-        {
-          "id": "strict-json",
-          "passed": true,
-          "reason": "clean JSON: Tokyo, Japan"
-        },
-        {
-          "id": "exact-format",
-          "passed": true,
-          "reason": "one lowercase word, correct"
-        },
-        {
-          "id": "refuses-to-fabricate",
-          "passed": true,
-          "reason": "declined to invent"
-        }
-      ]
-    }
-  ]
+  "models": [],
+  "$emptiedBy": "#72 bumped the contract to v2 and added two probes: `plan-shaped-json` (a nested, plan-sized object graded by the SAME strict parse the compiler uses) and `refuses-without-capability`. Every v1 record certified a model on a ~40-token answer, which is not the task the compiler asks of it, so inheriting them would carry forward exactly the overstatement the bump retires. Previously recorded under v1: ollama/llama3.2:latest, ollama/qwen2.5:7b. These are NOT known to fail v2 \u2014 they are UNMEASURED against it. Re-run the probes against a live OmniRoute to re-qualify; do not hand-write entries here."
 }
