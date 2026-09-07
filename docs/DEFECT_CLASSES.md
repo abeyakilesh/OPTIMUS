@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **83 classes · 70 with a real detection mechanism · 13 UNDETECTED**
+> **84 classes · 71 with a real detection mechanism · 13 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -822,6 +822,19 @@ The #68 instances add a second, sharper reason, worth stating on its own: **an a
 **Detection:** `kernel/checkContract.ts` :: `checkAppliesTo` is the single source, read by the compiler's prompt, the plan validator and the tests alike; `tests/kernel/check-applicability.test.ts` :: *every registered check declares applicability, and applies to at least one registered capability*; mutation — inverting the field rule makes `artifact.intact` stop matching. The map is deleted rather than left beside the declaration, because two copies of one fact is `stale-duplicate` regardless of which is authoritative.
 
 **Rule:** A stand-in for a rule that belongs elsewhere is deleted by the PR that moves it, not kept alongside.
+
+
+### `probe-lenient-where-consumer-is-strict`
+
+**Looks like:** A gate certifies a dependency using its own, gentler reading of the dependency's output. It passes; the real consumer then rejects the same output. The certificate is true about the probe and false about the system.
+
+**Instances:** #72 — `strict-json` graded a ~40-token answer with a local parse, and `qualified.json` recorded "this model emits strict JSON". The plan compiler asks for a nested, ~400-character object and refuses any trailing bytes. Measured on llama3.2:3b: **7/10** compiled, trailing text the dominant failure — *the plans were correct, what failed was stopping*. One run appended a second object that was a **refusal**; a lenient "take the first object" reading would have converted an admitted refusal into a plan. The probe had never seen an output long enough to exercise the difference.
+
+**Why it survived:** The probe was real, ran a real model, and graded meaning rather than shape — it passed every quality bar this repo applies to a check, except *resembling its consumer*. Size looks like a detail until the failure mode is length-dependent, and this one is: stopping cleanly is not tested by an answer with nothing to stop after.
+
+**Detection:** `kernel/strictJson.ts` :: `parseStrictObject` is the single reading, imported by both the compiler and the probe; `tests/unit/model-contract-probes.test.ts` :: the probe is asserted against the RAW outputs #72 recorded, so a grader that would have passed them fails here; mutation — make the parse lenient about trailing text or fences and those assertions go red.
+
+**Rule:** A probe grades its subject with the consumer's reading, at the consumer's size, or it certifies something nobody asked about.
 
 
 ## F · Failures that misreport themselves

@@ -29,9 +29,26 @@ test.describe("missions", () => {
     await expect(send).toBeEnabled();
   });
 
-  test("a real (unreachable) attempt reports honest unavailability and still appears in the sidebar as red", async ({
+  test("an unqualified model layer refuses honestly, and creates no phantom mission", async ({
     page,
   }) => {
+    // WHAT CHANGED, and why this test was rewritten rather than deleted.
+    //
+    // It used to assert that a failed attempt still appeared in the sidebar
+    // "as red". That held while llama3.2 was QUALIFIED: the request passed the
+    // model gate, became a real mission, and then failed at an unreachable
+    // backend — a runtime failure worth recording.
+    //
+    // #72 bumped the contract to v2 and emptied `qualified.json`, so nothing is
+    // qualified until the probes are re-run. The request is now refused AT THE
+    // GATE, before a mission exists. That is consistent with the gate's own
+    // stated intent ("an unqualified backend is UNAVAILABLE... It never runs
+    // the mission anyway"), and creating a mission row for an attempt that was
+    // never made would be a phantom record.
+    //
+    // COVERAGE HONESTLY LOST, stated rather than quietly dropped: nothing here
+    // now exercises "a mission that RAN and failed is still recorded as red".
+    // That path needs a qualified model, so it returns when the probes do.
     await page.goto("/chat");
     const marker = `e2e-unavailable-${Date.now()}`;
 
@@ -42,11 +59,10 @@ test.describe("missions", () => {
     await expect(page.getByText("model layer unavailable")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('[data-role="assistant"]')).toHaveCount(0);
 
-    // And it's a REAL mission, not thrown away — it shows up in history,
-    // honestly marked as not-green (hollow dot, not the emerald "passed" one).
-    const row = page.locator("aside li", { hasText: marker });
-    await expect(row).toBeVisible();
-    await expect(row.locator("span.bg-pass")).toHaveCount(0);
+    // Refused before anything ran, so there is nothing to record. Asserted as
+    // an ABSENCE on purpose: a row here would mean the UI invented a mission
+    // the kernel never accepted.
+    await expect(page.locator("aside li", { hasText: marker })).toHaveCount(0);
   });
 
   test("clicking a past mission in the sidebar reopens its real transcript, not the composer state", async ({
