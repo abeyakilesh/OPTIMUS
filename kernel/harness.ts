@@ -420,6 +420,9 @@ export class Harness {
     output?: unknown,
     outputArtifactId?: string,
   ): StepOutcome {
+    // Read the same way the loop reads it, so the ceilings recorded in
+    // evidence are the ones that were actually enforced.
+    const budget = spec.budget ?? manifest.defaultBudget;
     const evidence: Evidence = {
       stepId: spec.id,
       capabilityId: manifest.id,
@@ -450,9 +453,23 @@ export class Harness {
                 passed: false,
                 // `measured`, and the only place the kernel itself earns that
                 // label: attempts, wall time and cost are counted and compared
-                // against declared ceilings. The numbers are the evidence.
+                // against declared ceilings.
                 verification: "measured",
                 reason: failureReason,
+                // THE NUMBERS ARE THE EVIDENCE, so they are recorded rather
+                // than summarised into prose. Review catch on #82: the first
+                // version claimed `measured` and preserved only a sentence
+                // like "wall-time budget exhausted after 2 attempt(s)" — the
+                // elapsed value and the ceiling it breached were both lost.
+                // A measurement whose number is not kept is an assertion.
+                detail: {
+                  attempts,
+                  maxAttempts: budget.maxAttempts,
+                  elapsedMs: this.now() - startedAt,
+                  maxWallTimeMs: budget.maxWallTimeMs,
+                  cost,
+                  maxCost: budget.maxCost,
+                },
               },
             ]
           : checks,

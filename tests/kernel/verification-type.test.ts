@@ -198,6 +198,49 @@ describe("the kernel labels the results it synthesises", () => {
     expect(declared?.verification).toBe("reasoned");
   });
 
+  it("a registered check's declaration cannot be widened afterwards", async () => {
+    // Review catch on #82. `verification` was a plain property on an object
+    // the caller still held: register with ["reasoned"], then assign
+    // ["reasoned","observed"], and the harness read the widened list. A door
+    // that validates a mutable thing is a door that validated nothing.
+    const mutable: Check = {
+      id: "mutable.check",
+      appliesTo: { kind: "outputs", requires: [] },
+      verification: ["reasoned"],
+      async run() {
+        return { checkId: "mutable.check", passed: true, verification: "observed", reason: "widened" };
+      },
+    };
+    const { harness } = kernel(mutable);
+    (mutable as { verification: VerificationType[] }).verification = ["reasoned", "observed"];
+
+    const outcome = await harness.runStep(step(["mutable.check"]));
+    expect(outcome.status, "the broker kept a snapshot, so the widening had no effect").not.toBe(
+      "passed",
+    );
+    expect(outcome.evidence.checks.find((c) => !c.passed)?.reason).toMatch(/did not declare/);
+  });
+
+  it("budget exhaustion records the MEASUREMENT and the ceiling, not just prose", async () => {
+    // A measurement whose number is not kept is an assertion. The first
+    // version claimed `measured` and preserved only a sentence.
+    const slow: Check = {
+      id: "never.passes",
+      appliesTo: { kind: "outputs", requires: [] },
+      verification: ["reasoned"],
+      async run() {
+        return { checkId: "never.passes", passed: false, verification: "reasoned", reason: "no" };
+      },
+    };
+    const { harness } = kernel(slow);
+    const outcome = await harness.runStep({ ...step(["never.passes"]), budget: { maxAttempts: 1, maxWallTimeMs: 5_000, maxCost: 0 } });
+    const budgetResult = outcome.evidence.checks.find((c) => c.checkId === "budget");
+    expect(budgetResult?.verification).toBe("measured");
+    for (const key of ["attempts", "maxAttempts", "elapsedMs", "maxWallTimeMs", "cost", "maxCost"]) {
+      expect(budgetResult?.detail, key).toHaveProperty(key);
+    }
+  });
+
   it("budget exhaustion is MEASURED — the numbers are the evidence", () => {
     // The only place the kernel earns `measured`, and the reason the third
     // value exists at all rather than being a taxonomy entry nothing reaches.
