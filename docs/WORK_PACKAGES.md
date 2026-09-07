@@ -40,6 +40,21 @@ So this registry has three hard rules:
 Nothing beyond WP-005 is planned on purpose. The 17 pages, the other 58 repos
 and every Tier-3 surface stay out of this table until the wedge works.
 
+### Queued — deliberately NOT a work package yet
+
+Six rows is rule 1, and it is six because Atlas planned sixteen. A design being
+written down does not earn it a row; a free slot does.
+
+- **Remote control plane (multi-device).** Watching, pausing, steering and
+  approving a mission from a phone, tablet or second machine. Design recorded
+  in [ADR-0012](adr/0012-the-control-plane.md) — every part of it starts from
+  something the kernel already does, so if it ever needs a kernel change the
+  kernel would not otherwise want, that is the signal it is being built too
+  early. Becomes a work package when WP-005 lands and a slot frees.
+
+The first draft of this section added it as WP-006, which made seven rows and
+broke rule 1 in the document that states rule 1. Caught in review on #81.
+
 ---
 
 ## WP-000 · Landing page + CI gauntlet — ✅ Done
