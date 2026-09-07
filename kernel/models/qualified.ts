@@ -45,7 +45,12 @@ export interface QualificationRecord {
 export const QUALIFICATION: QualificationRecord = record as QualificationRecord;
 
 /** The current contract's version. Bumped when a probe is added or changed. */
-export const CONTRACT_VERSION = 1;
+// #72 bumped this to 2. Two probes were added and every existing
+// qualification EXPIRES rather than being inherited: a record written against
+// v1 certified a model on a ~40-token answer, which is not the task the
+// compiler asks of it. Inheriting those would carry forward exactly the
+// overstatement the bump exists to retire.
+export const CONTRACT_VERSION = 2;
 
 export type QualificationVerdict =
   | { qualified: true; entry: QualifiedModel; ageDays: number }

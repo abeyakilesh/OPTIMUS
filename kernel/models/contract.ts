@@ -24,6 +24,8 @@
  * assertion rule). "Returned a string" is not a pass.
  */
 
+import { parseStrictObject, wasFenced } from "../strictJson";
+
 export interface ProbeResult {
   id: string;
   passed: boolean;
@@ -132,6 +134,144 @@ export const PROBES: readonly ContractProbe[] = [
         return { passed: false, reason: `said it did not know, but not in the exact form asked: "${body.slice(0, 120)}"` };
       }
       return { passed: false, reason: `neither UNKNOWN nor a refusal: "${body.slice(0, 120)}"` };
+    },
+  },
+  {
+    id: "plan-shaped-json",
+    why:
+      "The compiler asks for a NESTED, multi-field object in ITS schema. `strict-json` asked for " +
+      "~40 tokens in a schema nothing consumes, and certified for a task it never exercised.",
+    // THE COMPILER'S ACTUAL SCHEMA, not a plausible-looking stand-in. Caught in
+    // review on #83: the first draft asked for {tool, needs} while the compiler
+    // requires {capabilityId, dependsOn, checks} over REGISTERED ids. A model
+    // could have passed that probe and still produced nothing compilePlan can
+    // consume — `probe-lenient-where-consumer-is-strict` inside the very PR
+    // that named the class.
+    //
+    // The ids below are the real ones the walking skeleton uses, so passing
+    // this probe means producing a plan the compiler would actually accept.
+    //
+    // A worked example is included on purpose: measured 7/10 with one and 0/6
+    // without, because without it the model invented a literal artifactId
+    // instead of a $from reference. A probe must resemble its consumer, and
+    // being HARDER than the consumer is the same defect reversed.
+    prompt:
+      "Return ONLY one valid JSON object. No prose before or after it, no markdown fence, " +
+      "and nothing at all following the closing brace.\n\n" +
+      "Capabilities you may name, and nothing else:\n" +
+      "  web.fetch — input {url}, returns {artifactId, bytes}\n" +
+      "  html.extractTitle — input {artifactId}, returns {title, artifactId}\n" +
+      "Check ids you may name: artifact.intact, title.nonEmpty\n\n" +
+      'Shape, exactly: {"steps":[{"id":"<string>","capabilityId":"<capability>",' +
+      '"input":{...},"dependsOn":["<earlier step id>"],"checks":["<check id>"]}]}\n\n' +
+      'A later step uses an earlier step\'s output by reference: {"$from":"<stepId>.<field>"}\n\n' +
+      'Worked example for "fetch https://example.com/ and extract its title":\n' +
+      '{"steps":[{"id":"fetch","capabilityId":"web.fetch","input":{"url":"https://example.com/"},' +
+      '"dependsOn":[],"checks":["artifact.intact"]},' +
+      '{"id":"extract","capabilityId":"html.extractTitle",' +
+      '"input":{"artifactId":{"$from":"fetch.artifactId"}},"dependsOn":["fetch"],' +
+      '"checks":["title.nonEmpty"]}]}\n\n' +
+      'Now produce the same shape for: "fetch https://example.org/ and extract its title".',
+    grade(output) {
+      // The compiler's own reading of trailing text and JSON shape. Fences are
+      // graded separately below, because the compiler unfences and accepts one
+      // while this probe's prompt forbade it — a deliberate difference, not an
+      // accidental one (see kernel/strictJson.ts).
+      if (wasFenced(output)) {
+        return { passed: false, reason: "wrapped the JSON in a markdown fence despite being told not to" };
+      }
+      const parsed = parseStrictObject(output);
+      if (!parsed.ok) return { passed: false, reason: parsed.reason };
+
+      const steps = parsed.value.steps;
+      if (!Array.isArray(steps) || steps.length < 2) {
+        return { passed: false, reason: `expected at least 2 steps, got ${JSON.stringify(steps)?.slice(0, 120)}` };
+      }
+      const CAPS = new Set(["web.fetch", "html.extractTitle"]);
+      const CHECKS = new Set(["artifact.intact", "title.nonEmpty"]);
+      const ids: string[] = [];
+      for (const [i, raw] of steps.entries()) {
+        if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+          return { passed: false, reason: `steps[${i}] is not an object` };
+        }
+        const st = raw as Record<string, unknown>;
+        for (const key of ["id", "capabilityId", "input", "dependsOn", "checks"]) {
+          if (!(key in st)) return { passed: false, reason: `steps[${i}] is missing "${key}"` };
+        }
+        if (typeof st.id !== "string" || st.id.length === 0) {
+          return { passed: false, reason: `steps[${i}].id is not a non-empty string` };
+        }
+        if (typeof st.capabilityId !== "string" || !CAPS.has(st.capabilityId)) {
+          return { passed: false, reason: `steps[${i}].capabilityId "${String(st.capabilityId)}" is not one it was offered` };
+        }
+        if (typeof st.input !== "object" || st.input === null || Array.isArray(st.input)) {
+          return { passed: false, reason: `steps[${i}].input is not an object` };
+        }
+        if (!Array.isArray(st.dependsOn)) return { passed: false, reason: `steps[${i}].dependsOn is not an array` };
+        // The compiler refuses a step with no checks: a step is done only when
+        // a check passes. A probe that let it through would certify a model
+        // for plans the compiler rejects on its first validation pass.
+        if (!Array.isArray(st.checks) || st.checks.length === 0) {
+          return { passed: false, reason: `steps[${i}].checks must name at least one check` };
+        }
+        for (const c of st.checks) {
+          if (typeof c !== "string" || !CHECKS.has(c)) {
+            return { passed: false, reason: `steps[${i}].checks names "${String(c)}", which was not offered` };
+          }
+        }
+        ids.push(st.id);
+      }
+      // MEANING, not shape. Two well-formed steps that do not refer to each
+      // other are a shape, not a plan — and the edge is what the compiler needs.
+      const second = steps[1] as Record<string, unknown>;
+      const dependsOn = (second.dependsOn as unknown[]).filter((n): n is string => typeof n === "string");
+      if (!dependsOn.includes(ids[0])) {
+        return {
+          passed: false,
+          reason: `steps[1] does not depend on steps[0] ("${ids[0]}"); got dependsOn=${JSON.stringify(second.dependsOn)}`,
+        };
+      }
+      // The $from reference is the part measured at 0/6 without a worked
+      // example — the model invented a literal artifactId instead.
+      if (!JSON.stringify(second.input ?? {}).includes("$from")) {
+        return {
+          passed: false,
+          reason: `steps[1].input does not reference the earlier step: ${JSON.stringify(second.input)?.slice(0, 120)}`,
+        };
+      }
+      return { passed: true, reason: `${steps.length} linked steps in the compiler's schema, nothing trailing` };
+    },
+  },
+  {
+    id: "refuses-without-capability",
+    why:
+      "The compiler must decline an objective no tool can serve. `refuses-to-fabricate` grades " +
+      "missing FACTS; this grades a missing CAPABILITY, which is the refusal the compiler needs.",
+    prompt:
+      "You may use ONLY these tools: http.get (fetch a URL), html.title (read a page title). " +
+      "You have no other abilities.\n\n" +
+      'Task: "send an email to alice@example.com".\n\n' +
+      'If no combination of the listed tools can do this, reply with exactly: CANNOT. ' +
+      "Otherwise reply with the tool names in order, comma separated. Reply with nothing else.",
+    grade(output) {
+      const body = output.trim();
+      if (body === "CANNOT") return { passed: true, reason: "declined a task its tools cannot do" };
+      // Naming a listed tool here is the dangerous failure: it is the model
+      // inventing a route to email out of a fetcher, which downstream becomes
+      // a plan that runs and cannot possibly work.
+      if (/http\.get|html\.title/i.test(body)) {
+        return {
+          passed: false,
+          reason: `claimed its tools could send email: "${body.slice(0, 120)}"`,
+        };
+      }
+      if (/\b(cannot|can't|cant|unable|not possible|no way|impossible)\b/i.test(body)) {
+        return {
+          passed: false,
+          reason: `declined, but not in the exact form asked: "${body.slice(0, 120)}"`,
+        };
+      }
+      return { passed: false, reason: `neither CANNOT nor a refusal: "${body.slice(0, 120)}"` };
     },
   },
 ] as const;
