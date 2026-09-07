@@ -256,6 +256,10 @@ export const browserNavigate: Capability = {
  */
 export const browserNavigateSucceeded: Check = {
   id: "browser.navigateSucceeded",
+  // Inspects the bridge's reported outcome. The navigation happened in a
+  // child process this check never watched, so `reasoned` is honest and
+  // `observed` would claim a vantage point it does not have.
+  verification: ["reasoned"],
   // NOT a field rule, and this is the pair that proves why both kinds exist:
   // `llm.chat` also returns `ok` and `error`, so `{requires:["ok"]}` would
   // make this check apply to it — true about the shape, false about the
@@ -267,6 +271,7 @@ export const browserNavigateSucceeded: Check = {
     if (!result || result.ok !== true) {
       return {
         checkId: "browser.navigateSucceeded",
+        verification: "reasoned",
         passed: false,
         reason: `navigation did not succeed: ${result?.error ?? "unknown error"}`,
       };
@@ -274,6 +279,7 @@ export const browserNavigateSucceeded: Check = {
     if (!result.text || result.text.trim().length === 0) {
       return {
         checkId: "browser.navigateSucceeded",
+        verification: "reasoned",
         passed: false,
         reason: "navigation reported ok=true but returned no page text",
       };
@@ -281,6 +287,7 @@ export const browserNavigateSucceeded: Check = {
 
     return {
       checkId: "browser.navigateSucceeded",
+      verification: "reasoned",
       passed: true,
       reason: `rendered "${result.title}" — ${result.text.length} chars of page text`,
       detail: { title: result.title, textLength: result.text.length },

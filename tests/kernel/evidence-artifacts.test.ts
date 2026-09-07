@@ -41,8 +41,9 @@ const repeater: Capability = {
 const passes: Check = {
   id: "always.passes",
   appliesTo: { kind: "outputs", requires: [] },
+  verification: ["reasoned"],
   async run() {
-    return { checkId: "always.passes", passed: true, reason: "ok" };
+    return { verification: "reasoned", checkId: "always.passes", passed: true, reason: "ok" };
   },
 };
 
@@ -195,8 +196,9 @@ describe("evidence records what a step produced, not only what it newly wrote", 
     const fails: Check = {
       id: "always.fails",
       appliesTo: { kind: "outputs", requires: [] },
+      verification: ["reasoned"],
       async run() {
-        return { checkId: "always.fails", passed: false, reason: "red on purpose" };
+        return { verification: "reasoned", checkId: "always.fails", passed: false, reason: "red on purpose" };
       },
     };
     const broker = new Broker();

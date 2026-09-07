@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **84 classes · 71 with a real detection mechanism · 13 UNDETECTED**
+> **85 classes · 72 with a real detection mechanism · 13 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -835,6 +835,17 @@ The #68 instances add a second, sharper reason, worth stating on its own: **an a
 **Detection:** `kernel/strictJson.ts` :: `parseStrictObject` is the single reading, imported by both the compiler and the probe; `tests/unit/model-contract-probes.test.ts` :: the probe is asserted against the RAW outputs #72 recorded, so a grader that would have passed them fails here; mutation — make the parse lenient about trailing text or fences and those assertions go red.
 
 **Rule:** A probe grades its subject with the consumer's reading, at the consumer's size, or it certifies something nobody asked about.
+### `evidence-without-its-method`
+
+**Looks like:** Two conclusions reached by very different means render identically. The record says WHAT was concluded and never HOW, so a reader — or a scoring gate — cannot weigh one against the other, and the weaker one silently reads as strong as the strongest.
+
+**Instances:** #63 — `CheckResult` was `{ checkId, passed, reason, detail? }`. In one green mission `title.nonEmpty` (reads a returned string and decides) and `artifact.intact` (re-reads bytes through a store that re-derives the content address) both printed `✔`. Gate 7's proof scoring and the Absorption Score's Proof-coverage component were positioned to consume evidence that could not distinguish reasoning from observation. Atlas §14 — *"do not claim stronger evidence than actually exists"* — was unstatable, so it was also uncheckable.
+
+**Why it survived:** The missing field looks like an omission of *detail*, not of *meaning*. `passed: true` feels complete — it answers the question the caller asked. The cost only appears one layer out, at the moment something tries to compare two proofs, and by then the information was never captured to begin with.
+
+**Detection:** `kernel/verification.ts` :: `assertVerificationMethods` at registration, `assertResultMethod` at run time in `kernel/harness.ts` — an overclaim fails the step; `tests/kernel/verification-type.test.ts` :: mutation — disable the declared-method check and an overclaim is accepted. **Partial by construction:** it cannot verify that a check calling itself `observed` observed anything. It stops a check claiming a method it never declared, which is where drift starts — the same honest limit as `outputTrust`.
+
+**Rule:** A record of a conclusion carries the method that reached it, or it defaults to the weakest reading its evidence supports.
 
 
 ## F · Failures that misreport themselves

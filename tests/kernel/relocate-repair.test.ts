@@ -35,8 +35,8 @@ const caseNamed = (n: string) => {
 function obs(output: unknown, ok = true): Observation {
   return { ok, output, durationMs: 1, cost: 1 };
 }
-const passed = (id: string): CheckResult => ({ checkId: id, passed: true, reason: "ok" });
-const failed = (id: string, reason: string): CheckResult => ({ checkId: id, passed: false, reason });
+const passed = (id: string): CheckResult => ({ verification: "reasoned", checkId: id, passed: true, reason: "ok" });
+const failed = (id: string, reason: string): CheckResult => ({ verification: "reasoned", checkId: id, passed: false, reason });
 
 const input = (percentage: number): RelocateInput => ({
   fingerprint: { tag: "div", attributes: { class: "price" }, text: "$899", path: ["html", "body", "div"] } as never,

@@ -62,8 +62,9 @@ function capability(over: Partial<CapabilityManifest>, output: unknown): Capabil
 const alwaysPasses: Check = {
   id: "always.passes",
   appliesTo: { kind: "outputs", requires: [] },
+  verification: ["reasoned"],
   async run() {
-    return { checkId: "always.passes", passed: true, reason: "by construction" };
+    return { verification: "reasoned", checkId: "always.passes", passed: true, reason: "by construction" };
   },
 };
 
@@ -194,8 +195,9 @@ describe("the output door refuses what the manifest did not promise", () => {
     broker.registerCheck({
       id: "never.passes",
       appliesTo: { kind: "outputs", requires: [] },
+      verification: ["reasoned"],
       async run() {
-        return { checkId: "never.passes", passed: false, reason: "the mission's question" };
+        return { verification: "reasoned", checkId: "never.passes", passed: false, reason: "the mission's question" };
       },
     });
     const harness = new Harness({ broker, store: new MemoryArtifactStore() });

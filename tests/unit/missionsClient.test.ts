@@ -146,7 +146,7 @@ describe("sendMission — failure classification", () => {
           capabilityId: "llm.chat",
           status: "finished",
           durationMs: 13_614,
-          checks: [{ checkId: "llm.chatSucceeded", passed: true, reason: "replied with 25 chars" }],
+          checks: [{ verification: "reasoned", checkId: "llm.chatSucceeded", passed: true, reason: "replied with 25 chars" }],
         },
       ],
     });

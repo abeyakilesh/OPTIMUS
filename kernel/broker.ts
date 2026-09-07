@@ -12,6 +12,7 @@ import type { Isolation } from "./sandbox";
 import { assertConstraints, checkInput } from "./inputContract";
 import { assertOutputs, assertOutputTrust, checkOutput } from "./outputContract";
 import { assertApplicability } from "./checkContract";
+import { assertVerificationMethods } from "./verification";
 
 export class BrokerError extends Error {}
 
@@ -158,6 +159,15 @@ export class Broker {
       );
     }
     assertApplicability(check.appliesTo, check.id);
+    // #63, at the same door. A check that cannot say HOW it knows produces
+    // evidence indistinguishable from one that ran the thing and watched.
+    if (check.verification === undefined) {
+      throw new BrokerError(
+        `${check.id}: check declares no verification methods. Say how it knows — ` +
+          `any of reasoned | observed | measured`,
+      );
+    }
+    assertVerificationMethods(check.verification, check.id);
     this.checks.set(check.id, check);
   }
 

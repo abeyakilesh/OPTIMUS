@@ -166,6 +166,10 @@ export const scraplingRelocate: Capability = {
  */
 export const relocateContractHonored: Check = {
   id: "relocate.contractHonored",
+  // Reasons over returned values against the parent's documented contract.
+  // It does NOT re-run Scrapling, so it is not `observed`; gate 11 is where
+  // parent behaviour is actually exercised.
+  verification: ["reasoned"],
   // Capability-scoped, not field-scoped: this verifies the PARENT's contract
   // (Scrapling 0.4.9's relocate semantics), which is a statement about one
   // implementation rather than about any output carrying `found`/`score`.
@@ -176,6 +180,7 @@ export const relocateContractHonored: Check = {
     if (!result || typeof result.found !== "boolean" || typeof result.score !== "number") {
       return {
         checkId: "relocate.contractHonored",
+        verification: "reasoned",
         passed: false,
         reason: `malformed output: ${JSON.stringify(result)}`,
       };
@@ -185,6 +190,7 @@ export const relocateContractHonored: Check = {
       if (result.score < result.percentage!) {
         return {
           checkId: "relocate.contractHonored",
+          verification: "reasoned",
           passed: false,
           reason: `claimed found=true at score ${result.score}, below its own threshold ${result.percentage}`,
         };
@@ -192,6 +198,7 @@ export const relocateContractHonored: Check = {
       if (!result.matches || result.matches.length === 0) {
         return {
           checkId: "relocate.contractHonored",
+          verification: "reasoned",
           passed: false,
           reason: "claimed found=true but returned zero matches",
         };
@@ -199,6 +206,7 @@ export const relocateContractHonored: Check = {
     } else if (result.score >= result.percentage!) {
       return {
         checkId: "relocate.contractHonored",
+        verification: "reasoned",
         passed: false,
         reason: `claimed found=false but score ${result.score} clears threshold ${result.percentage}`,
       };
@@ -206,6 +214,7 @@ export const relocateContractHonored: Check = {
 
     return {
       checkId: "relocate.contractHonored",
+      verification: "reasoned",
       passed: true,
       reason: result.found
         ? `found ${result.matches!.length} match(es) at score ${result.score} (threshold ${result.percentage})`
@@ -262,15 +271,22 @@ export const MAX_RELAXATION = 15;
  */
 export const relocateFoundMatch: Check = {
   id: "relocate.foundMatch",
+  verification: ["reasoned"],
   appliesTo: { kind: "capabilities", ids: ["scrapling.relocate"] },
   async run(output): Promise<CheckResult> {
     const r = output as Partial<RelocateOutput> | undefined;
     if (!r || typeof r.found !== "boolean" || typeof r.score !== "number") {
-      return { checkId: "relocate.foundMatch", passed: false, reason: `malformed output: ${JSON.stringify(r)}` };
+      return {
+        checkId: "relocate.foundMatch",
+        passed: false,
+        verification: "reasoned",
+        reason: `malformed output: ${JSON.stringify(r)}`,
+      };
     }
     if (!r.found) {
       return {
         checkId: "relocate.foundMatch",
+        verification: "reasoned",
         passed: false,
         reason: `no element scored above ${r.percentage}; best candidate was ${r.score}`,
         detail: { bestScore: r.score, threshold: r.percentage },
@@ -278,6 +294,7 @@ export const relocateFoundMatch: Check = {
     }
     return {
       checkId: "relocate.foundMatch",
+      verification: "reasoned",
       passed: true,
       // States the threshold ACTUALLY APPLIED, which is how a relaxed find
       // stays visible: compare it against the percentage in the step's input.

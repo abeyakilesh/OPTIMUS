@@ -26,6 +26,7 @@ import type {
 import type { Broker } from "./broker";
 import type { ArtifactStore } from "./artifacts";
 import { hashInput } from "./artifacts";
+import { assertResultMethod } from "./verification";
 import { createContext, type Fetcher } from "./permissions";
 import { rollbackScope, snapshotTree, restoreTree } from "./rollback";
 
@@ -133,7 +134,9 @@ export class Harness {
       startedAt,
       0,
       [],
-      [{ checkId, passed: false, reason }],
+      // Refused BEFORE the capability ran, so nothing was exercised: the
+      // kernel reasoned from the spec alone.
+      [{ checkId, passed: false, verification: "reasoned", reason }],
       hashInput(spec.input),
       reason,
     );
@@ -218,6 +221,10 @@ export class Harness {
           {
             checkId: "capability.completed",
             passed: false,
+            // `observed`: the kernel invoked the capability and watched it
+            // fail. This is not a conclusion drawn from a returned value —
+            // there was no value, which is the observation.
+            verification: "observed",
             reason: observation.error ?? "capability failed",
           },
         ];
@@ -346,6 +353,8 @@ export class Harness {
         {
           checkId: "verification.declared",
           passed: false,
+          // A fact about the SPEC, decided without running anything.
+          verification: "reasoned",
           reason: `step ${spec.id} declares no checks — a step is done only when a check passes`,
         },
       ];
@@ -356,11 +365,24 @@ export class Harness {
     for (const checkId of spec.checks) {
       const check = this.deps.broker.check(checkId);
       try {
-        results.push(await check.run(output, ctx));
+        const result = await check.run(output, ctx);
+        // #63. The method a result claims must be one the check declared.
+        // Without this the field is a label a check writes about itself —
+        // the same shape as the `trust` tag before #70: required, present,
+        // and unable to say whether it is true. This cannot prove a check
+        // calling itself `observed` observed anything; it does stop one
+        // claiming a method it never declared, which is where drift starts.
+        assertResultMethod(check.verification, result.verification, `${spec.id}.${checkId}`);
+        results.push(result);
       } catch (error) {
         results.push({
           checkId,
           passed: false,
+          // A check that misdeclares its method FAILS the step. Recording it
+          // as a pass with a note would be the green-check-on-nothing this
+          // whole spine exists to prevent, and `reasoned` is the honest
+          // method for "we inspected what it returned and refused it".
+          verification: "reasoned",
           reason: `check threw: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
@@ -422,7 +444,17 @@ export class Harness {
       ],
       checks:
         failureReason && checks.length === 0
-          ? [{ checkId: "budget", passed: false, reason: failureReason }]
+          ? [
+              {
+                checkId: "budget",
+                passed: false,
+                // `measured`, and the only place the kernel itself earns that
+                // label: attempts, wall time and cost are counted and compared
+                // against declared ceilings. The numbers are the evidence.
+                verification: "measured",
+                reason: failureReason,
+              },
+            ]
           : checks,
       inputHash,
       ...(outputArtifactId ? { outputArtifactId } : {}),
