@@ -1,6 +1,14 @@
 /**
  * #84, first slice: OPTIMUS reads its own task list off the disk.
  *
+ * LIVES BESIDE `builtin.ts`, NOT IN `kernel/capabilities/`. That directory is
+ * for adapters over ABSORBED REPOS — browser-use, omniroute, scrapling — and
+ * the absorption guard treats a new entry there as a repo absorption, demanding
+ * a fidelity story and an Absorption Score. These two are kernel builtins with
+ * no parent repo to be faithful to. The guard was right and the first draft's
+ * file placement was wrong; `absorption-guard.test.ts` asserts that directory
+ * holds exactly three.
+ *
  * The acceptance mission is "download the ~215 repos named in
  * `MISSING_DOMAINS_AND_REPOS.md`". Before anything can be downloaded, the list
  * has to be read and parsed — and that half needs no network, so it is where
@@ -29,8 +37,8 @@
  */
 
 import { resolve } from "node:path";
-import type { Capability, Check, CheckResult } from "../types";
-import { ARTIFACT_ID_OUTPUT } from "../outputContract";
+import type { Capability, Check, CheckResult } from "./types";
+import { ARTIFACT_ID_OUTPUT } from "./outputContract";
 
 /**
  * Operator-declared read root. Undefined and empty both fall back to the repo,

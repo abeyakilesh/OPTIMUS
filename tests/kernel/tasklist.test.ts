@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Broker } from "../../kernel/broker";
 import { Harness } from "../../kernel/harness";
 import { MemoryArtifactStore } from "../../kernel/artifacts";
-import { reposExtract, reposFound, extractRepoRefs } from "../../kernel/capabilities/tasklist";
+import { reposExtract, reposFound, extractRepoRefs } from "../../kernel/tasklist";
 import { artifactIntact } from "../../kernel/builtin";
 import type { Capability } from "../../kernel/types";
 

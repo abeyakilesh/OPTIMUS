@@ -37,7 +37,7 @@ import {
 } from "./capabilities/scrapling-relocate";
 import { llmChat, llmChatSucceeded } from "./capabilities/omniroute/chat";
 import { browserNavigate, browserNavigateSucceeded } from "./capabilities/browser-use/navigate";
-import { fsReadFile, reposExtract, reposFound } from "./capabilities/tasklist";
+import { fsReadFile, reposExtract, reposFound } from "./tasklist";
 
 /**
  * Every capability the kernel knows how to run.
