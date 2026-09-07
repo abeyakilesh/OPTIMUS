@@ -46,8 +46,9 @@ function kernel() {
 const stub = (id: string, appliesTo: CheckApplicability): Check => ({
   id,
   appliesTo,
+  verification: ["reasoned"],
   async run() {
-    return { checkId: id, passed: true, reason: "stub" };
+    return { verification: "reasoned", checkId: id, passed: true, reason: "stub" };
   },
 });
 
@@ -63,7 +64,7 @@ function planPairing(capabilityId: string, checks: string[]): MissionSpec {
 
 describe("a check declares what it can verify, and the broker refuses a bad declaration", () => {
   it("refuses a check with no appliesTo at all", () => {
-    const naked = { id: "x", async run() { return { checkId: "x", passed: true, reason: "" } } };
+    const naked = { id: "x", async run() { return { verification: "reasoned", checkId: "x", passed: true, reason: "" } } };
     expect(() => new Broker().registerCheck(naked as unknown as Check)).toThrow(/declares no appliesTo/);
   });
 

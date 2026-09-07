@@ -133,6 +133,11 @@ export const htmlExtractTitle: Capability = {
 
 export const titleNonEmpty: Check = {
   id: "title.nonEmpty",
+  // Reads the string that came back and decides. Nothing was exercised to
+  // find out, so this is `reasoned` — the weakest honest label, and the
+  // right one. Calling it `observed` would be the overstatement Atlas §14
+  // names.
+  verification: ["reasoned"],
   // Reads `output.title` and nothing else, so the rule is the FIELD, not a
   // capability list. That broadens it correctly: `browser.navigate` also
   // declares `title`, and asking whether a navigated page had a real title is
@@ -144,12 +149,14 @@ export const titleNonEmpty: Check = {
     if (typeof title !== "string" || title.trim().length === 0) {
       return {
         checkId: "title.nonEmpty",
+        verification: "reasoned",
         passed: false,
         reason: `expected a non-empty title, got ${JSON.stringify(title)}`,
       };
     }
     return {
       checkId: "title.nonEmpty",
+      verification: "reasoned",
       passed: true,
       reason: `title is ${title.length} chars`,
       detail: { title },
@@ -177,6 +184,12 @@ export const titleNonEmpty: Check = {
  */
 export const artifactIntact: Check = {
   id: "artifact.intact",
+  // `observed`, and the only check in the kernel that earns it today. It
+  // reads the bytes back through a store that re-derives the address on
+  // read (#61), so the conclusion rests on what the store DID, not on what
+  // the capability returned. That is exactly the distinction #63 exists to
+  // record — this check and title.nonEmpty rendered identically before.
+  verification: ["observed"],
   // The case #71 was filed around: this applies to anything returning an
   // artifactId — five capabilities today. Declared as the FIELD so it cannot
   // go stale; a sixth capability is covered the moment it registers, with
@@ -187,6 +200,7 @@ export const artifactIntact: Check = {
     if (typeof id !== "string") {
       return {
         checkId: "artifact.intact",
+        verification: "observed",
         passed: false,
         reason: `step returned no artifactId (got ${JSON.stringify(id)})`,
       };
@@ -195,6 +209,7 @@ export const artifactIntact: Check = {
       const bytes = await ctx.readArtifact(id);
       return {
         checkId: "artifact.intact",
+        verification: "observed",
         passed: true,
         reason: `artifact ${id} readable and intact, ${bytes.length} bytes`,
         detail: { artifactId: id, bytes: bytes.length },
@@ -202,6 +217,7 @@ export const artifactIntact: Check = {
     } catch (error) {
       return {
         checkId: "artifact.intact",
+        verification: "observed",
         passed: false,
         reason: `artifact ${id} is not readable: ${
           error instanceof Error ? error.message : String(error)
@@ -218,6 +234,9 @@ export const artifactIntact: Check = {
 export function expectArtifact(expectedId: string): Check {
   return {
     id: `artifact.equals:${expectedId}`,
+    // Compares the returned id to an expected one. A string comparison over
+    // a value, not an observation of anything re-derived.
+    verification: ["reasoned"],
     // #71 flagged this one specifically: "expectArtifact(id) is a check
     // FACTORY, so its applicability is per-instance." It is not — the id
     // varies per instance, the SHAPE it reads does not. Every instance reads
@@ -228,6 +247,7 @@ export function expectArtifact(expectedId: string): Check {
       const passed = id === expectedId;
       return {
         checkId: `artifact.equals:${expectedId}`,
+        verification: "reasoned",
         passed,
         reason: passed
           ? `artifact matches expected hash`

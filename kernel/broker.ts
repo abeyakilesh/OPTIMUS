@@ -12,6 +12,7 @@ import type { Isolation } from "./sandbox";
 import { assertConstraints, checkInput } from "./inputContract";
 import { assertOutputs, assertOutputTrust, checkOutput } from "./outputContract";
 import { assertApplicability } from "./checkContract";
+import { assertVerificationMethods } from "./verification";
 
 export class BrokerError extends Error {}
 
@@ -158,7 +159,27 @@ export class Broker {
       );
     }
     assertApplicability(check.appliesTo, check.id);
-    this.checks.set(check.id, check);
+    // #63, at the same door. A check that cannot say HOW it knows produces
+    // evidence indistinguishable from one that ran the thing and watched.
+    if (check.verification === undefined) {
+      throw new BrokerError(
+        `${check.id}: check declares no verification methods. Say how it knows — ` +
+          `any of reasoned | observed | measured`,
+      );
+    }
+    assertVerificationMethods(check.verification, check.id);
+    // SNAPSHOT, not a reference. Review catch on #82: `verification` is a
+    // plain property on an object the caller still holds, so a check
+    // registered as ["reasoned"] could afterwards assign
+    // ["reasoned","observed"] and the harness would read the widened list.
+    // Validating at the door means nothing if the thing validated can change
+    // behind it — the same shape as a permission checked once and re-read
+    // later. `appliesTo` is frozen for the same reason.
+    this.checks.set(check.id, {
+      ...check,
+      appliesTo: Object.freeze({ ...check.appliesTo }) as typeof check.appliesTo,
+      verification: Object.freeze([...check.verification]),
+    });
   }
 
   /** Everything registered, for the compiler's prompt and the exhaustiveness tests. */

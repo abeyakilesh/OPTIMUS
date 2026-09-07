@@ -123,7 +123,13 @@ async function main(): Promise<void> {
 
     for (const check of evidence.checks) {
       const cm = check.passed ? green("✔") : red("✘");
-      console.log(`      ${cm} ${check.checkId} ${dim(`— ${check.reason}`)}`);
+      // #63: HOW it knew, beside WHAT it concluded. Without this the trace
+      // renders a check that read a returned string and a check that re-read
+      // bytes through an integrity-verifying store as the same green tick,
+      // which is the distinction the verification spine exists to preserve.
+      console.log(
+        `      ${cm} ${check.checkId} ${dim(`[${check.verification}]`)} ${dim(`— ${check.reason}`)}`,
+      );
     }
     console.log(
       dim(

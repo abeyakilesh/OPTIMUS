@@ -52,15 +52,17 @@ function writer(id: string, files: Array<[string, string]>): Capability {
 const alwaysPasses: Check = {
   id: "always.passes",
   appliesTo: { kind: "outputs", requires: [] },
+  verification: ["reasoned"],
   async run() {
-    return { checkId: "always.passes", passed: true, reason: "ok" };
+    return { verification: "reasoned", checkId: "always.passes", passed: true, reason: "ok" };
   },
 };
 const alwaysFails: Check = {
   id: "always.fails",
   appliesTo: { kind: "outputs", requires: [] },
+  verification: ["reasoned"],
   async run() {
-    return { checkId: "always.fails", passed: false, reason: "deliberately red" };
+    return { verification: "reasoned", checkId: "always.fails", passed: false, reason: "deliberately red" };
   },
 };
 
