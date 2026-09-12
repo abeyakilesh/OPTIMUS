@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@ast-grep/cli": "^0.45.3",
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20",
