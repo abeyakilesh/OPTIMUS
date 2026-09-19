@@ -45,6 +45,14 @@ and every Tier-3 surface stay out of this table until the wedge works.
 Six rows is rule 1, and it is six because Atlas planned sixteen. A design being
 written down does not earn it a row; a free slot does.
 
+- **The mission canvas.** The large surface where a mission is watched
+  happening — plan, steps as a DAG, tools, data-flow arrows, evidence, budgets
+  burning down, and a warehouse of results. Design recorded in
+  [ADR-0015](adr/0015-the-mission-canvas.md), whose load-bearing rule is **no
+  pixel without an event**: every element maps to a `KernelEvent` that already
+  exists, and there is deliberately no "thinking" animation because there is no
+  thinking event. Part of WP-005 when it starts.
+
 - **Remote control plane (multi-device).** Watching, pausing, steering and
   approving a mission from a phone, tablet or second machine. Design recorded
   in [ADR-0012](adr/0012-the-control-plane.md) — every part of it starts from
