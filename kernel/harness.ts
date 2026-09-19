@@ -28,7 +28,15 @@ import type { ArtifactStore } from "./artifacts";
 import { hashInput } from "./artifacts";
 import { assertResultMethod } from "./verification";
 import { createContext, type Fetcher, type NetFetcher } from "./permissions";
-import { rollbackScope, snapshotTree, restoreTree } from "./rollback";
+import {
+  rollbackScope,
+  snapshotTree,
+  restoreTree,
+  snapshotCreatedEntries,
+  discardCreatedEntries,
+  type TreeSnapshot,
+  type CreatedEntriesSnapshot,
+} from "./rollback";
 
 export interface HarnessDeps {
   broker: Broker;
@@ -101,13 +109,27 @@ export class Harness {
    * retry currently starts from whatever the previous attempt left behind.
    */
   async runStep(spec: StepSpec, repair?: Repair): Promise<StepOutcome> {
-    const roots = rollbackScope(this.deps.broker.capability(spec.capabilityId).manifest.isolation);
-    const before = roots.length > 0 ? await snapshotTree(roots) : undefined;
+    const isolation = this.deps.broker.capability(spec.capabilityId).manifest.isolation;
+    const roots = rollbackScope(isolation);
+    // Chosen from the manifest, never inferred from how big the tree turned
+    // out to be: a strategy that switched itself when a directory grew would
+    // mean the rollback guarantee silently changed shape under load, which is
+    // the one moment it must not.
+    const discardOnly = isolation?.rollback === "discard-created";
+
+    const before =
+      roots.length === 0
+        ? undefined
+        : discardOnly
+          ? await snapshotCreatedEntries(roots)
+          : await snapshotTree(roots);
 
     const outcome = await this.runStepUnprotected(spec, repair);
 
     if (before && outcome.status !== "passed") {
-      outcome.evidence.rolledBack = await restoreTree(before);
+      outcome.evidence.rolledBack = discardOnly
+        ? await discardCreatedEntries(before as CreatedEntriesSnapshot)
+        : await restoreTree(before as TreeSnapshot);
     }
     return outcome;
   }

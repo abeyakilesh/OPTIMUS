@@ -1,8 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Link from "next/link";
-import { Logo } from "@/components/landing/Icons";
 import SignOutButton from "@/components/auth/SignOutButton";
 import MissionSidebar, { type MissionSidebarHandle } from "@/components/chat/MissionSidebar";
 import ChatPanel from "@/components/chat/ChatPanel";
@@ -22,16 +20,7 @@ export default function ChatShell() {
   const sidebarRef = useRef<MissionSidebarHandle>(null);
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex h-16 shrink-0 items-center border-b border-line bg-white/85 px-6 backdrop-blur-md">
-        <Link href="/" aria-label="OPTIMUS home">
-          <Logo />
-        </Link>
-        <div className="ml-auto">
-          <SignOutButton />
-        </div>
-      </header>
-
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <div className="flex flex-1 overflow-hidden">
         <MissionSidebar
           ref={sidebarRef}

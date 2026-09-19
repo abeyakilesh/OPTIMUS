@@ -75,6 +75,37 @@ export interface Isolation {
    * visible and scored honestly, never mistaken for a boundary.
    */
   unconfinedChildEgress?: boolean;
+  /**
+   * How a failed step is undone. Default `"snapshot"`.
+   *
+   * `"snapshot"` reads every file beneath the roots BEFORE the step and
+   * rewrites them after a failure. It is exact — it restores modified content,
+   * not merely structure — and it is the right mechanism for a capability that
+   * EDITS a small workspace.
+   *
+   * `"discard-created"` records only the direct entries present at each root
+   * beforehand, and on failure removes whatever appeared that was not there.
+   * No content is read, so cost is the number of entries at the root rather
+   * than the number of files beneath it.
+   *
+   * WHY THE SECOND EXISTS, and it is not a performance tweak. #84 clones
+   * repositories into a shared root. Snapshot refused on the *second* repo —
+   * 5,470 files past a 5,000 cap — and the cap was right to refuse: the
+   * mechanism would have read every byte of every cloned repository into
+   * memory to protect a directory that did not exist before the step. At 244
+   * repos it is not slow, it is impossible.
+   *
+   * The distinction is what the capability DOES, not how big it is: one edits
+   * things that already exist, the other creates whole new trees. Restoring
+   * content matters for the first and is meaningless for the second.
+   *
+   * ⚠️ THE LIMIT, stated because it is a real weakening. `"discard-created"`
+   * does NOT restore modifications made INSIDE an entry that already existed.
+   * A capability that both creates new trees and edits existing ones is not
+   * served by it, and must not declare it. `git.clone` qualifies because a
+   * clone into an occupied directory is refused by git itself.
+   */
+  rollback?: "snapshot" | "discard-created";
 }
 
 /** Nothing granted. What a capability gets when it declares no radius. */

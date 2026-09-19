@@ -83,7 +83,7 @@ export default function Hero() {
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
-              href="/chat"
+              href="/home"
               className="group inline-flex items-center gap-2 rounded-lg bg-ink px-5 py-3 text-[15px] font-medium text-white transition hover:bg-ink/88"
             >
               Start for free

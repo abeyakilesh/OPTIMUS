@@ -11,13 +11,17 @@
     "test": "vitest",
     "test:e2e": "playwright test",
     "scan": "ast-grep scan --config sgconfig.yml",
-    "mission": "tsx kernel/cli.ts"
+    "mission": "tsx kernel/cli.ts",
+    "download": "tsx kernel/downloadCli.ts"
   },
   "dependencies": {
+    "@xyflow/react": "^12.11.1",
     "htmlparser2": "^9.1.0",
+    "lucide-react": "^0.468.0",
     "next": "16.3.3",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@ast-grep/cli": "^0.45.3",
