@@ -14,7 +14,7 @@ classified.
 
 ## Coverage
 
-> **85 classes · 72 with a real detection mechanism · 13 UNDETECTED**
+> **86 classes · 73 with a real detection mechanism · 13 UNDETECTED**
 >
 > The UNDETECTED figure above is the one that matters: those classes have nothing stopping them
 > recurring today. Several of the "detected" are covered by a single test rather than a general
@@ -38,6 +38,20 @@ name a tracking issue or a reason it cannot be automated.
 ---
 
 ## A · Descriptions that do not match what they describe
+
+### `double-never-installed`
+
+**Looks like:** A test that believes it is exercising an injected test double is silently using the real system. It is green, its assertions are real, and it is proving the wrong code path — so the injected seam can rot indefinitely without one test going red.
+
+**Instances:** PR #89 (the first run of the `github.resolve` tests reached the live GitHub API and returned hono's **actual** commit sha instead of the fixture's; every assertion passed). Caught by nothing mechanical — the tell was that the answer was **too correct**: the test had never been told hono's real sha, so a real sha coming back was the only evidence the double was absent.
+
+**Why it survived:** `netRead` has carried an injectable `fetcher?` since the first commit, its docstring reading *"Injectable so tests never touch the real network."* `netFetch` was added later with no such seam. Nobody decided that tests could reach the network — the seam was simply missing from the newer surface, and **a green suite is indistinguishable from a correctly-doubled one by inspection.** The belief was load-bearing and nothing executed it (THE ENFORCEMENT RULE).
+
+**Detection:** `tests/setup/no-real-network.ts` :: *replaces global fetch for every test; any non-loopback host throws with the injection to use*; `tests/unit/no-real-network.test.ts` :: *the guard refuses external hosts, permits loopback, and fails closed on an unparseable URL*
+
+**Rule:** A test double must be enforced by the harness, not assumed by the author — a suite cannot tell you it forgot to install one.
+
+---
 
 ### `stale-duplicate`
 

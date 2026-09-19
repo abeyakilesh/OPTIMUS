@@ -77,6 +77,22 @@ export const CAPABILITY_SELECTION: Readonly<
       "boundary rather than by a string test. The operator widening the root widens what a " +
       "compiled plan can read, and that is their decision to make knowingly",
   },
+  "github.resolve": {
+    selectable: true,
+    reason:
+      "net:read bounded to api.github.com, and it READS ONLY — THINK plane, data.read method " +
+      "(ADR-0016), so re-running it changes nothing outside. Its credential comes from the " +
+      "environment and there is deliberately no input field for a token: step input is written " +
+      "by a model and must never carry a secret",
+  },
+  "git.clone": {
+    selectable: false,
+    reason:
+      "isolation.unconfinedChildEgress — the clone's network traffic happens inside a git child " +
+      "process the kernel cannot police, so its blast radius is whatever that OS user can reach. " +
+      "Same ceiling as browser.navigate, same blocker (codesandbox-sdk). ACT plane, and the " +
+      "#84 mission that uses it is hand-written and human-approved rather than compiled",
+  },
   "repos.extract": {
     selectable: true,
     reason: "zero permissions; parses a stored document through the artifact store, like html.extractTitle",
