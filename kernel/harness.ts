@@ -27,13 +27,15 @@ import type { Broker } from "./broker";
 import type { ArtifactStore } from "./artifacts";
 import { hashInput } from "./artifacts";
 import { assertResultMethod } from "./verification";
-import { createContext, type Fetcher } from "./permissions";
+import { createContext, type Fetcher, type NetFetcher } from "./permissions";
 import { rollbackScope, snapshotTree, restoreTree } from "./rollback";
 
 export interface HarnessDeps {
   broker: Broker;
   store: ArtifactStore;
   fetcher?: Fetcher;
+  /** Injectable `netFetch`, so a capability using it can be tested hermetically. */
+  netFetcher?: NetFetcher;
   /** Injectable clock so budget tests don't sleep in real time. */
   now?: () => number;
   /** Reports each attempt so the scheduler can log it. */
@@ -305,6 +307,7 @@ export class Harness {
       granted: manifest.permissions,
       store: this.deps.store,
       fetcher,
+      netFetcher: this.deps.netFetcher,
       // Undeclared isolation reaches createContext as undefined and is treated
       // as DENY_ALL there — the fail-closed default lives in one place.
       isolation: manifest.isolation,

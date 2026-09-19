@@ -38,6 +38,8 @@ import {
 import { llmChat, llmChatSucceeded } from "./capabilities/omniroute/chat";
 import { browserNavigate, browserNavigateSucceeded } from "./capabilities/browser-use/navigate";
 import { fsReadFile, reposExtract, reposFound } from "./tasklist";
+import { githubResolve, repoResolved } from "./github";
+import { gitClone, repoIntact } from "./gitClone";
 
 /**
  * Every capability the kernel knows how to run.
@@ -57,6 +59,8 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   // and per this file's header that is NOT the same as AVAILABLE.
   fsReadFile,
   reposExtract,
+  githubResolve,
+  gitClone,
 ];
 
 /** Every check. A capability's check must be registered or its steps cannot pass. */
@@ -64,6 +68,8 @@ export const ALL_CHECKS: readonly Check[] = [
   titleNonEmpty,
   artifactIntact,
   reposFound,
+  repoResolved,
+  repoIntact,
   relocateContractHonored,
   relocateFoundMatch,
   llmChatSucceeded,
