@@ -34,6 +34,7 @@
  */
 
 import { join, resolve, isAbsolute } from "node:path";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { Capability, Check, CheckResult } from "./types";
 import { ARTIFACT_ID_OUTPUT } from "./outputContract";
@@ -164,6 +165,21 @@ export const gitClone: Capability = {
 
     const root = downloadRoot();
     const target = join(root, dest);
+
+    /**
+     * ALREADY-PRESENT IS NOT A FAILURE, and treating it as one was a real bug.
+     *
+     * `git clone` refuses a non-empty destination with exit 128, so a second
+     * run of the same repo failed every time — which is exactly what a person
+     * does when they re-run a mission. The download root is durable on
+     * purpose; the capability has to cope with its own previous output.
+     *
+     * The destination is removed rather than reused. Reusing it would mean
+     * reporting a HEAD this run did not fetch, and `repo.intact` would then
+     * compare GitHub's answer against a clone of unknown age — a check that
+     * passes on stale bytes is worse than one that fails.
+     */
+    await rm(target, { recursive: true, force: true });
 
     // --depth 1: the history is not the point, the tree is. 244 repos with
     // full history is tens of gigabytes of data nothing here reads.

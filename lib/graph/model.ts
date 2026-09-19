@@ -82,6 +82,22 @@ export type ExecState =
   | "blocked"   // an upstream failure stopped it — carries a reason
   | "failed" | "completed" | "cancelled" | "paused";
 
+/**
+ * A named connection point. GENERIC — the inspector renders these without
+ * knowing what capability produced them, which is what stops it becoming a
+ * `git.clone` viewer with a `git.clone`-shaped panel.
+ */
+export interface Port {
+  /** Field name as the capability declares it. */
+  name: string;
+  /** Declared kind — "String", "Data", "Artifact". Display only. */
+  kind?: string;
+  /** For an input: the node its value came from. For an output: where it went. */
+  linkedNodeId?: string;
+  /** The field on that node. */
+  linkedField?: string;
+}
+
 export interface GraphNode {
   id: string;
   type: NodeType;
@@ -97,8 +113,15 @@ export interface GraphNode {
   data?: Record<string, unknown>;
   /** Set when this node opens into its own graph. Nesting, for scale. */
   subgraphId?: string;
-  /** Cluster membership — what collapses together at low zoom. */
+  /** Cluster membership — what collapses together, and what draws a region. */
   groupId?: string;
+  /**
+   * Declared connection points. Populated by the projector from the manifest's
+   * input/output contract, so a node explains itself without the inspector
+   * carrying per-capability knowledge.
+   */
+  inputs?: Port[];
+  outputs?: Port[];
   /** Set by layout, or by a user dragging. Absent means "lay me out". */
   position?: { x: number; y: number };
 }
@@ -113,11 +136,26 @@ export interface GraphEdge {
   label?: string;
 }
 
+/**
+ * A labelled region on the canvas — the "1. Research & Data Collection" band.
+ *
+ * THIS IS THE SCALE ANSWER, and it is structural rather than cosmetic. A group
+ * is a real part of the graph: it can be collapsed into a single node, it can
+ * carry its own subgraph, and its members lay out inside its own bounds rather
+ * than in one global column. 244 repos is 244 groups of three, not 488 nodes
+ * in a line.
+ */
 export interface GraphGroup {
   id: string;
   label: string;
+  /** Display order — the "1.", "2." prefix in the reference layout. */
+  index?: number;
   /** Collapsed groups render as ONE node. This is how 10,000 stays usable. */
   collapsed?: boolean;
+  /** Opens into its own graph, for genuine nesting. */
+  subgraphId?: string;
+  /** Palette slot 0-5. Not a raw colour — see nodeTypes.GROUP_TINTS. */
+  tint?: number;
 }
 
 export interface Graph {

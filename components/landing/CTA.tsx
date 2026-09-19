@@ -31,7 +31,7 @@ export default function CTA() {
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
           <Link
-            href="/chat"
+            href="/home"
             className="group inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan to-cyan-dark px-7 py-3.5 text-[15px] font-semibold text-white transition hover:brightness-110"
           >
             Start free

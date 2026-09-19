@@ -32,5 +32,9 @@ export async function GET(
   }
 
   const graph = projectLog(events, missionId);
-  return NextResponse.json({ ok: true, graph, eventCount: events.length });
+  // The raw log travels WITH the projection, because the dock shows events in
+  // their own vocabulary. A surface that only received the projection could
+  // not show what it was derived from — and "show me the evidence" is the
+  // whole point of this page.
+  return NextResponse.json({ ok: true, graph, events, eventCount: events.length });
 }

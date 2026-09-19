@@ -53,6 +53,12 @@ export const config = {
     // The graph is a mission's full evidence trail — every step, every
     // artifact id, every check. Gated for the same reason /api/missions is.
     "/api/graph/:path*",
+    "/api/library",
+    "/library",
+    "/api/plan",
+    "/results",
+    "/plan",
+    "/home",
     "/missions",
     "/missions/:path*",
   ],

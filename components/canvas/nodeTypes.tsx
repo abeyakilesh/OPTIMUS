@@ -1,77 +1,68 @@
 /**
- * THE RENDERER REGISTRY. One entry per NodeType.
+ * THE RENDERER REGISTRY. One row per NodeType, one row per ExecState.
  *
- * This file is why the canvas is an architecture and not a mission dashboard:
- * a video model, a human approval or a nested subgraph is a row here. The
- * canvas core never learns what any of them are — it looks up `type`, gets a
- * glyph, and draws the same card.
+ * This is why the canvas is an architecture and not a mission dashboard:
+ * a video model, a human approval or a nested subgraph is a ROW here, rendered
+ * by the same `GenericNode`. The canvas core never learns what any of them are.
  *
- * ⚠️ COLOUR IS RESERVED FOR STATE, NOT FOR TYPE. The first draft of this file
- * gave each of twenty node types its own hue and was correctly failed by
- * `integrity.test.ts` — the palette is deliberately five colours plus three
- * semantic ones, and a per-type rainbow is exactly the drift that test exists
- * to prevent.
- *
- * It is also better design. On a canvas, the question a person asks is "what
- * is happening" far more often than "what kind of node is this" — and TYPE is
- * already carried by the glyph and the sublabel. Spending colour on type would
- * leave nothing legible to spend on state.
+ * ⚠️ COLOUR IS RESERVED FOR STATE, NOT TYPE. An earlier draft gave each of
+ * twenty types its own hue and was correctly failed by `integrity.test.ts` —
+ * the palette is five colours plus three semantic ones, and a per-type rainbow
+ * is exactly the drift that test exists to prevent. Type is carried by the
+ * icon; state gets the colour, because "what is happening" is the question a
+ * person asks far more often than "what kind of node is this".
  *
  * Only `capability` has real data behind it today. The rest are registered so
  * the shape is proven before the work arrives; the PROJECTOR is what refuses
  * to emit a node type nothing produced.
  */
 
+import {
+  Bot, Boxes, Wrench, Globe, Code2, Chrome, Terminal, Database, FileText,
+  Table2, Brain, User, CheckCircle2, GitBranch, Split, Zap, Clock, Workflow,
+  Layers, Play, StickyNote, Circle, type LucideIcon,
+} from "lucide-react";
 import type { NodeType, ExecState } from "@/lib/graph/model";
 
 export interface NodeChrome {
-  /** Single glyph — themeable, and no icon dependency to pin. */
-  icon: string;
-  /** `true` for nodes that act on the world; they get the accent plate. */
+  Icon: LucideIcon;
+  /** Nodes that ACT on the world get the accent plate; passive ones do not. */
   accented?: boolean;
 }
 
 const REGISTRY: Record<string, NodeChrome> = {
-  capability: { icon: "⚙", accented: true },
-  agent:      { icon: "◈", accented: true },
-  model:      { icon: "◉", accented: true },
-  tool:       { icon: "⚒", accented: true },
-  api:        { icon: "⇄", accented: true },
-  browser:    { icon: "◍", accented: true },
-  terminal:   { icon: "▮", accented: true },
-  code:       { icon: "⌘", accented: true },
-  rag:        { icon: "◎", accented: true },
-  workflow:   { icon: "❐", accented: true },
-  subgraph:   { icon: "⊞", accented: true },
-  mission:    { icon: "▶", accented: true },
-  trigger:    { icon: "⚡", accented: true },
-  scheduler:  { icon: "◷", accented: true },
-  // Passive nodes — things that hold or await rather than act.
-  dataset:    { icon: "▤" },
-  file:       { icon: "▢" },
-  database:   { icon: "▦" },
-  human:      { icon: "☺" },
-  approval:   { icon: "✓" },
-  decision:   { icon: "◆" },
-  condition:  { icon: "⑂" },
-  note:       { icon: "✎" },
+  capability: { Icon: Wrench, accented: true },
+  agent:      { Icon: Bot, accented: true },
+  model:      { Icon: Boxes, accented: true },
+  tool:       { Icon: Wrench, accented: true },
+  api:        { Icon: Globe, accented: true },
+  code:       { Icon: Code2, accented: true },
+  browser:    { Icon: Chrome, accented: true },
+  terminal:   { Icon: Terminal, accented: true },
+  rag:        { Icon: Brain, accented: true },
+  workflow:   { Icon: Workflow, accented: true },
+  subgraph:   { Icon: Layers, accented: true },
+  mission:    { Icon: Play, accented: true },
+  trigger:    { Icon: Zap, accented: true },
+  scheduler:  { Icon: Clock, accented: true },
+  dataset:    { Icon: Table2 },
+  file:       { Icon: FileText },
+  database:   { Icon: Database },
+  human:      { Icon: User },
+  approval:   { Icon: CheckCircle2 },
+  decision:   { Icon: Split },
+  condition:  { Icon: GitBranch },
+  note:       { Icon: StickyNote },
 };
 
-const FALLBACK: NodeChrome = { icon: "○" };
+const FALLBACK: NodeChrome = { Icon: Circle };
 
 /** Never throws on an unknown type — a kernel may grow one before this file does. */
 export function chromeFor(type: NodeType): NodeChrome {
   return REGISTRY[type] ?? FALLBACK;
 }
 
-/**
- * Execution state → palette token. Deliberately separate from node type: the
- * same kind of node looks different running than blocked, and a type whose
- * colour encoded its state could not show both.
- *
- * Every value is a token from `app/globals.css`. No raw hex, so the canvas
- * cannot drift away from the rest of the product.
- */
+/** Every value is a palette token from app/globals.css. No raw hex. */
 export const STATE_CHROME: Record<ExecState, { colour: string; label: string }> = {
   idle:      { colour: "var(--color-muted)", label: "idle" },
   queued:    { colour: "var(--color-muted)", label: "queued" },
@@ -84,3 +75,31 @@ export const STATE_CHROME: Record<ExecState, { colour: string; label: string }> 
   cancelled: { colour: "var(--color-muted)", label: "cancelled" },
   completed: { colour: "var(--color-pass)",  label: "verified" },
 };
+
+/**
+ * Group region tints. Deliberately WASHES, not palette hues — a region is a
+ * background a person reads nodes on top of, so it must never compete with the
+ * state colour carried by the nodes inside it.
+ */
+export const GROUP_TINTS = [
+  { bg: "color-mix(in srgb, var(--color-cyan) 5%, transparent)",  border: "color-mix(in srgb, var(--color-cyan) 22%, transparent)",  text: "var(--color-cyan-dark)" },
+  { bg: "color-mix(in srgb, var(--color-pass) 5%, transparent)",  border: "color-mix(in srgb, var(--color-pass) 22%, transparent)",  text: "var(--color-pass)" },
+  { bg: "color-mix(in srgb, var(--color-run) 5%, transparent)",   border: "color-mix(in srgb, var(--color-run) 22%, transparent)",   text: "var(--color-run)" },
+  { bg: "color-mix(in srgb, var(--color-fail) 4%, transparent)",  border: "color-mix(in srgb, var(--color-fail) 20%, transparent)",  text: "var(--color-fail)" },
+  { bg: "color-mix(in srgb, var(--color-ink) 4%, transparent)",   border: "color-mix(in srgb, var(--color-ink) 14%, transparent)",   text: "var(--color-body)" },
+  { bg: "color-mix(in srgb, var(--color-cyan) 8%, transparent)",  border: "color-mix(in srgb, var(--color-cyan) 26%, transparent)",  text: "var(--color-cyan-dark)" },
+] as const;
+
+/** The left rail's palette — what a user can add. Order is deliberate. */
+export const PALETTE: { type: NodeType; label: string }[] = [
+  { type: "agent", label: "Agent" },
+  { type: "model", label: "Model" },
+  { type: "tool", label: "Tool" },
+  { type: "api", label: "API" },
+  { type: "dataset", label: "Data" },
+  { type: "file", label: "File" },
+  { type: "human", label: "Human" },
+  { type: "condition", label: "Condition" },
+  { type: "subgraph", label: "Subgraph" },
+  { type: "note", label: "Note" },
+];

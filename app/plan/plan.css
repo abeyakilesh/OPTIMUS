@@ -1,0 +1,44 @@
+.plan-wrap { flex:1; overflow-y:auto; padding:44px 40px; max-width:920px; }
+.plan-head h1 { margin:0; font-size:26px; font-weight:650; letter-spacing:-.03em; }
+.plan-head p { margin:8px 0 0; font-size:13.5px; color:var(--color-muted); max-width:560px;
+  line-height:1.6; }
+.plan-box { display:flex; flex-direction:column; gap:10px; margin:26px 0; padding:14px;
+  border-radius:14px; border:1px solid var(--color-line); background:var(--color-white); }
+.plan-box textarea { border:0; outline:none; resize:vertical; font-size:14px; font-family:inherit;
+  color:var(--color-ink); background:transparent; line-height:1.5; }
+.plan-box button { align-self:flex-end; display:flex; align-items:center; gap:6px; font-size:13px;
+  padding:8px 15px; border-radius:9px; border:1px solid var(--color-ink);
+  background:var(--color-ink); color:var(--color-white); cursor:pointer; }
+.plan-box button:disabled { background:var(--color-line); border-color:var(--color-line);
+  color:var(--color-muted); cursor:not-allowed; }
+.plan-problem { display:flex; gap:11px; padding:15px; border-radius:12px;
+  background:var(--color-run-soft); border:1px solid var(--color-run); color:var(--color-ink); }
+.plan-problem b { font-size:13.5px; }
+.plan-problem p { margin:4px 0 0; font-size:12.5px; color:var(--color-body); line-height:1.55; }
+.plan-result { margin:28px 0; }
+.plan-result h2, .plan-skills h2 { display:flex; align-items:center; gap:6px; margin:0 0 12px;
+  font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--color-muted); }
+.plan-steps { margin:0; padding:0; list-style:none; }
+.plan-steps li { display:flex; align-items:center; gap:12px; padding:13px 15px;
+  border:1px solid var(--color-line); border-radius:11px; background:var(--color-white);
+  margin-bottom:7px; }
+.plan-num { display:grid; place-items:center; width:24px; height:24px; flex-shrink:0;
+  border-radius:50%; background:var(--color-sky-2); color:var(--color-cyan-dark);
+  font-size:11.5px; font-weight:650; }
+.plan-steps b { font-size:13.5px; font-weight:600; display:block; }
+.plan-agent { font-size:11.5px; color:var(--color-muted); margin-right:9px; }
+.plan-after { font-size:11px; color:var(--color-muted); }
+.plan-checks { margin-left:auto; display:flex; align-items:center; gap:4px; font-size:11px;
+  color:var(--color-pass); white-space:nowrap; }
+.plan-approve { display:flex; align-items:center; gap:12px; margin-top:14px; }
+.plan-approve .is-primary { display:flex; align-items:center; gap:6px; font-size:13px;
+  padding:9px 16px; border-radius:9px; border:1px solid var(--color-line);
+  background:var(--color-line); color:var(--color-muted); cursor:not-allowed; }
+.plan-skills { margin-top:34px; padding-top:26px; border-top:1px solid var(--color-line); }
+.plan-skill-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:9px;
+  margin-bottom:14px; }
+.plan-skill { padding:11px 13px; border-radius:10px; border:1px solid var(--color-line);
+  background:var(--color-white); }
+.plan-skill b { display:block; font-size:12.5px; font-weight:600; }
+.plan-skill span { font-size:11px; color:var(--color-muted); }
+.plan-muted { font-size:12.5px; color:var(--color-muted); line-height:1.6; max-width:560px; }

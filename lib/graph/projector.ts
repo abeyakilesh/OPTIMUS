@@ -54,6 +54,32 @@ const STATE_OF: Record<StepStatus, ExecState> = {
 export function projectSpec(spec: MissionSpec): Graph {
   const graph = emptyGraph(spec.id, spec.objective);
 
+  /**
+   * GROUPING IS STRUCTURAL, NOT COSMETIC.
+   *
+   * A 244-repo download is 244 groups of two steps, not 488 nodes in a column.
+   * The grouping key comes from the step id's SUBJECT (`clone:owner/repo` ->
+   * `owner/repo`), which is the same thing a person means by "that repo's
+   * work" — so a group can be collapsed to one node, and the canvas stays
+   * readable at any size without inventing a clustering heuristic.
+   *
+   * Steps with no `:` fall into no group and lay out at the top level, which
+   * is correct for a mission whose steps are genuinely unrelated.
+   */
+  const subjectOf = (stepId: string): string | undefined => {
+    const at = stepId.indexOf(":");
+    return at > 0 ? stepId.slice(at + 1) : undefined;
+  };
+  const subjects = [...new Set(spec.steps.map((s) => subjectOf(s.id)).filter(Boolean))] as string[];
+  subjects.forEach((subject, i) => {
+    graph.groups.push({
+      id: `group:${subject}`,
+      label: subject,
+      index: i + 1,
+      tint: i % 6,
+    });
+  });
+
   for (const step of spec.steps) {
     graph.nodes.push({
       id: step.id,
@@ -61,6 +87,15 @@ export function projectSpec(spec: MissionSpec): Graph {
       label: step.id,
       sublabel: step.capabilityId,
       state: "idle",
+      groupId: subjectOf(step.id) ? `group:${subjectOf(step.id)}` : undefined,
+      // Ports come from the STEP, so the inspector never needs per-capability
+      // knowledge. A `$from` input is recorded with where it points, which is
+      // what makes the inspector's "came from" section generic.
+      inputs: Object.entries((step.input ?? {}) as Record<string, unknown>).map(([name, v]) => {
+        const ref = v && typeof v === "object" && "$from" in v ? String((v as { $from: string }).$from) : undefined;
+        const [fromNode, fromField] = ref ? ref.split(".") : [];
+        return { name, kind: ref ? "Reference" : typeof v, linkedNodeId: fromNode, linkedField: fromField };
+      }),
       data: { capabilityId: step.capabilityId, checks: step.checks, attempts: 0 },
     });
 
@@ -151,6 +186,9 @@ export function applyEvent(graph: Graph, event: KernelEvent): Graph {
     case "step.finished":
       patch(graph, event.stepId, (n) => {
         n.state = STATE_OF[event.status] ?? "idle";
+        n.outputs = (event.evidence.producedArtifactIds ?? event.evidence.artifactIds ?? []).map(
+          (id, i) => ({ name: `artifact${i > 0 ? i + 1 : ""}`, kind: "Artifact", linkedField: id }),
+        );
         n.data = {
           ...n.data,
           exitCode: event.evidence.exitCode,

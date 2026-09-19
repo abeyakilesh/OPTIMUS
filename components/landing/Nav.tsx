@@ -58,7 +58,7 @@ export default function Nav() {
           </Link>
 
           <Link
-            href="/chat"
+            href="/home"
             className="rounded-lg bg-ink px-4 py-2 text-[14px] font-medium text-white transition hover:bg-ink/88"
           >
             Get started free
